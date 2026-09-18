@@ -8,7 +8,7 @@ from pathlib import Path
 from openai import OpenAI
 
 try:
-    from AI.AI_model.config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL
+    from AI_model.config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL
 except ModuleNotFoundError:
     from config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL
 
