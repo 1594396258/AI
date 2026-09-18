@@ -1,5 +1,5 @@
 test:
-  base_url: https://jsonplaceholder.typicode.com
+  base_url: https://abroad-saas-deposit-k8s-test.wallyt.net/gateway
   timeout: 10
-  username: admin
-  password: 123456
+  username: AccManager
+  password: Admin125.
