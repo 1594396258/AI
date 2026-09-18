@@ -1,0 +1,22 @@
+- case: 正常获取文章
+  method: get
+  path: /posts/1
+  expected_status: 200
+  expected_body:
+    id: 1
+
+- case: 获取不存在的文章
+  method: get
+  path: /posts/99999
+  expected_status: 404
+
+- case: 创建文章
+  method: post
+  path: /posts
+  body:
+    title: 测试文章
+    body: 这是内容
+    userId: 1
+  expected_status: 201
+  expected_body:
+    title: 测试文章
