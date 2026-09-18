@@ -6,7 +6,7 @@ import os
 
 def load_yaml(file_path: str) -> list:
     """
-    读取 yaml 文件，返回列表
+    读取 yaml 文件，返回列表（取决于yaml文件是-开头，表示列表）
     """
     with open(file_path, encoding="utf-8") as f:
         return yaml.safe_load(f)

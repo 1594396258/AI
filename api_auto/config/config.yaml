@@ -1,3 +1,5 @@
 test:
   base_url: https://jsonplaceholder.typicode.com
   timeout: 10
+  username: admin
+  password: 123456
