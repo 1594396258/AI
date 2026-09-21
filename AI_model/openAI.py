@@ -35,14 +35,21 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def ask_ai(messages):
-    for _ in range(6):
-        response = client.chat.completions.create(model=OPENAI_MODEL, messages=messages, tools=TOOLS)
+    for round_number in range(6):
+        request = {"model": OPENAI_MODEL, "messages": messages, "tools": TOOLS}
+        # Require a tool call on the first turn so we can verify that the
+        # OpenAI-compatible proxy really supports tool calling.
+        if round_number == 0:
+            request["tool_choice"] = "required"
+        response = client.chat.completions.create(**request)
         if not hasattr(response, "choices"):
             raise RuntimeError("接口没有返回标准 OpenAI JSON，请检查 OPENAI_BASE_URL 是否以 /v1 结尾。")
         message = response.choices[0].message
         tool_calls = getattr(message, "tool_calls", None)
         if not tool_calls:
             return message.content or ""
+        for call in tool_calls:
+            print(f"[模型请求工具] {call.function.name}({call.function.arguments})")
         messages.append({"role": "assistant", "content": message.content, "tool_calls": [call.model_dump() for call in tool_calls]})
         for call in tool_calls:
             try:
@@ -65,6 +72,39 @@ def local_command(user_input):
     if command == "/read" and argument:
         return "本地文件内容：\n" + json.dumps(read_file(argument), ensure_ascii=False)
     return None
+
+
+def local_context_for_request(user_input):
+    """Provide deterministic local context when the proxy ignores tool calls."""
+    lowered = user_input.casefold()
+    keyword_map = (
+        ("redis", "redis"),
+        ("数据库", "database"),
+        ("接口", "api"),
+        ("配置", "config"),
+        ("代码", "class"),
+    )
+    query = next((query for keyword, query in keyword_map if keyword in lowered), None)
+    if query is None:
+        return None
+
+    search_result = search_code(query, limit=20)
+    print(f"[本地预读取兜底] 关键词: {query}")
+    context_parts = ["本地代码上下文（由 Python 只读工具预先提供；不要再声称无法访问本地代码）："]
+    context_parts.append(json.dumps(search_result, ensure_ascii=False))
+    # Include a few matching files so this fallback also works with proxies
+    # that accept chat completions but do not implement tool_calls.
+    seen = set()
+    for match in search_result["matches"]:
+        path = match["path"]
+        if path in seen or len(seen) >= 3:
+            continue
+        seen.add(path)
+        try:
+            context_parts.append(json.dumps(read_file(path, 1, 160), ensure_ascii=False))
+        except (ValueError, OSError):
+            continue
+    return "\n".join(context_parts)
 
 
 def read_user_input():
