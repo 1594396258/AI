@@ -5,7 +5,7 @@ from api_auto.api.base_api import BaseApi
 from api_auto.api.login_api import LoginApi
 from api_auto.utils.data_loader import load_config
 from api_auto.utils.encrypt import encrypt_password
-
+from api_auto.utils.redis_helper import get_captcha_from_redis
 @pytest.fixture(scope="session")
 def config():
     return load_config("test")
@@ -43,17 +43,15 @@ def auth_api(config):
     )
     # 第一步：获取验证码
     captcha_resp = api.get_captcha()
-    data = captcha_resp.get("dataObj", captcha_resp)
-    request_id = data.get("requestId")
-    # 第二步：暂时用固定验证码，后续让开发关闭或提供万能验证码
-    captcha = "7j7y"
-
+    request_id = captcha_resp.get("requestId")
+    # 第二步：从 Redis 获取验证码原文
+    captcha =get_captcha_from_redis(request_id)
+    assert captcha, f"从 Redis 获取验证码失败, requestId={request_id}"
     # 第三步：加密密码
     password_md5 = encrypt_password(
         username=config["username"],
         plain_password=config["password"]
     )
-
     # 第四步：登录
     api.login(
         username=config["username"],
@@ -66,3 +64,10 @@ def auth_api(config):
     api.set_csrf_token()
 
     return api
+
+@pytest.fixture(scope="session", autouse=True)
+def login(auth_api):
+    """
+    session 级别自动登录，所有用例执行前自动触发
+    """
+    pass

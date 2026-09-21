@@ -12,9 +12,12 @@ class LoginApi(BaseApi):
         """
         获取验证码
         """
-        resp = self.get("/base/admin/verifyCode")
+        resp = self.post("/base/admin/verifyCode")
         assert resp.status_code == 200, f"获取验证码失败: {resp.text}"
-        return resp.json()
+        data=resp.json()
+        assert data.get("success"), f"获取验证码业务失败: {data}"
+        return data.get("dataObj", {})
+
 
     def login(self, username: str, password_md5: str,
               captcha: str, request_id: str):
