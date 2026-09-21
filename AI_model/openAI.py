@@ -23,6 +23,7 @@ client = OpenAI(
     base_url=OPENAI_BASE_URL,
 )
 
+
 CURRENT_DIR = Path(__file__).resolve().parent
 HISTORY_FILE = CURRENT_DIR / "chat_history.json"
 SYSTEM_MESSAGE = {"role": "system", "content": "你是一个有帮助的中文代码助手。需要检查本地项目时，先使用 list_files、search_code 或 read_file 工具；不要假设自己能直接访问磁盘。工具是只读的。"}
