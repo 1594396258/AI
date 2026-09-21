@@ -67,6 +67,24 @@ def local_command(user_input):
     return None
 
 
+def read_user_input():
+    """Read one message, or collect a pasted multi-line message."""
+    first_line = input("你：")
+    if first_line.strip().lower() not in {"/multi", "/paste"}:
+        return first_line.strip()
+
+    print("进入多行输入模式，粘贴内容后单独输入 /send 提交，输入 /cancel 取消。")
+    lines = []
+    while True:
+        line = input("... ")
+        command = line.strip().lower()
+        if command == "/send":
+            return "\n".join(lines).strip()
+        if command == "/cancel":
+            return ""
+        lines.append(line)
+
+
 def load_messages():
     if not HISTORY_FILE.exists():
         return [SYSTEM_MESSAGE.copy()]
@@ -97,9 +115,9 @@ def clear_messages():
 def chat():
     messages = load_messages()
 
-    print("开始和 AI 对话，输入 exit 或 quit 退出，输入 clear 清空历史。")
+    print("开始和 AI 对话，输入 exit 或 quit 退出，输入 clear 清空历史；输入 /multi 可粘贴多行内容。")
     while True:
-        user_input = input("你：").strip()
+        user_input = read_user_input()
         if user_input.lower() in {"exit", "quit"}:
             print("已退出。")
             break
