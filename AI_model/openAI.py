@@ -2,9 +2,10 @@
 # Date:2026/6/29
 
 import json
+import logging
 import sys
 from pathlib import Path
-
+from loguru import logger
 from openai import OpenAI
 
 try:
@@ -17,16 +18,15 @@ try:
 except ModuleNotFoundError:
     from config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL
 
-
 client = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=OPENAI_BASE_URL,
 )
 
-
 CURRENT_DIR = Path(__file__).resolve().parent
 HISTORY_FILE = CURRENT_DIR / "chat_history.json"
-SYSTEM_MESSAGE = {"role": "system", "content": "你是一个有帮助的中文代码助手。需要检查本地项目时，先使用 list_files、search_code 或 read_file 工具；不要假设自己能直接访问磁盘。工具是只读的。"}
+SYSTEM_MESSAGE = {"role": "system",
+                  "content": "你是一个有帮助的中文代码助手。需要检查本地项目时，先使用 list_files、search_code 或 read_file 工具；不要假设自己能直接访问磁盘。工具是只读的。"}
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdin.reconfigure(encoding="utf-8")
@@ -42,6 +42,8 @@ def ask_ai(messages):
         if round_number == 0:
             request["tool_choice"] = "required"
         response = client.chat.completions.create(**request)
+        print(f"大模型原始返回信息{response}")
+        print(type(response))
         if not hasattr(response, "choices"):
             raise RuntimeError("接口没有返回标准 OpenAI JSON，请检查 OPENAI_BASE_URL 是否以 /v1 结尾。")
         message = response.choices[0].message
@@ -49,8 +51,10 @@ def ask_ai(messages):
         if not tool_calls:
             return message.content or ""
         for call in tool_calls:
+            print(type(call.function.arguments),call.function.arguments,sep="\n")
             print(f"[模型请求工具] {call.function.name}({call.function.arguments})")
-        messages.append({"role": "assistant", "content": message.content, "tool_calls": [call.model_dump() for call in tool_calls]})
+        messages.append(
+            {"role": "assistant", "content": message.content, "tool_calls": [call.model_dump() for call in tool_calls]})
         for call in tool_calls:
             try:
                 result = execute_tool(call.function.name, call.function.arguments)

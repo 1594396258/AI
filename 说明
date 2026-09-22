@@ -1,3 +1,77 @@
 
 我们先用一个公开的免费测试接口：
 `https://jsonplaceholder.typicode.com`
+
+
+
+
+
+已经接入到你的 pytest + API 自动化 框架中，当前接入的是“测试失败自动诊断”模式。
+整体流程：
+pytest 执行接口测试
+        ↓
+测试通过：正常结束，不调用 AI
+        ↓
+测试失败：捕获失败信息
+        ↓
+AI 助手读取相关本地源码
+        ↓
+模型分析失败原因
+        ↓
+终端输出分析结果，并附加到 Allure 报告
+我新增了：
+[ai_assistant.py](D:/PyCharm 2025.2.3/AI/api_auto/utils/ai_assistant.py)
+这个文件负责：
+- 创建 OpenAI-compatible 客户端
+- 接收 pytest 的失败信息
+- 通过 search_code 搜索相关代码
+- 通过 read_file 读取源代码
+- 把失败信息和源码交给模型分析
+- 返回中文诊断结论
+同时修改了：
+[conftest.py](D:/PyCharm 2025.2.3/AI/conftest.py)
+增加了 pytest 参数：
+--ai-analyze
+所以普通测试仍然这样运行：
+python -m pytest api_auto/tests/test_posts.py
+需要启用 AI 诊断时运行：
+python -m pytest api_auto/tests/test_posts.py --ai-analyze -s
+或者运行全部测试：
+python -m pytest --ai-analyze -s
+失败时会看到类似：
+[AI 失败分析]
+根因：...
+证据：...
+建议修改：...
+验证方式：...
+如果安装并使用了 Allure，报告中还会多一个：
+AI 失败分析
+这个方案没有修改 BaseApi，也没有把 AI 调用塞进每一个测试用例。这样测试请求和 AI 诊断相互独立：
+- 接口测试仍由 BaseApi 负责
+- 测试数据仍由 YAML 驱动
+- pytest 仍负责执行和断言
+- AI 只负责失败后的分析
+另外，AI 诊断失败不会覆盖原始测试失败。比如模型服务断开时，终端会显示：
+[AI 分析不可用] ...
+但原来的 pytest 断言错误仍然保留。
+当前实现适合先解决：
+- Redis 配置错误
+- 登录失败
+- 接口状态码不符合预期
+- 响应字段断言失败
+- 测试数据与接口契约不一致
+- URL 或请求方法错误
+后续可以在同一个结构上继续扩展：
+失败诊断
+    ↓
+自动生成修复建议
+    ↓
+生成新的 YAML 测试数据
+    ↓
+生成接口测试代码
+现在的第一步已经完成：你的测试框架可以在失败时自动调用大模型分析本地代码。
+
+  Edited 2 files+129-3Review changesUndoReview
+
+api_auto/utils/ai_assistant.pyapi_auto/utils/ai_assistant.py+88-0
+conftest.pyconftest.py

@@ -6,6 +6,44 @@ from api_auto.api.login_api import LoginApi
 from api_auto.utils.data_loader import load_config
 from api_auto.utils.encrypt import encrypt_password
 from api_auto.utils.redis_helper import get_captcha_from_redis
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--ai-analyze",
+        action="store_true",
+        default=False,
+        help="Use the AI assistant to diagnose failed pytest cases.",
+    )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    if not report.failed or report.when not in {"setup", "call"}:
+        return
+    if not item.config.getoption("--ai-analyze"):
+        return
+
+    try:
+        from api_auto.utils.ai_assistant import analyze_test_failure
+
+        analysis = analyze_test_failure(item.nodeid, report.longreprtext)
+        try:
+            import allure
+
+            allure.attach(
+                analysis,
+                name="AI 失败分析",
+                attachment_type=allure.attachment_type.TEXT,
+            )
+        except ImportError:
+            pass
+        print(f"\n[AI 失败分析]\n{analysis}")
+    except Exception as exc:
+        # AI diagnosis is optional and must never hide the original test error.
+        print(f"\n[AI 分析不可用] {exc}")
 @pytest.fixture(scope="session")
 def config():
     return load_config("test")
