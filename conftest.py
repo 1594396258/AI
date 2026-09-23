@@ -8,6 +8,9 @@ from api_auto.utils.encrypt import encrypt_password
 from api_auto.utils.redis_helper import get_captcha_from_redis
 
 
+print("conftest.py 被加载")
+
+#pytest 增加一个自定义命令行参数 --ai-analyze
 def pytest_addoption(parser):
     parser.addoption(
         "--ai-analyze",
@@ -17,6 +20,8 @@ def pytest_addoption(parser):
     )
 
 
+
+#测试报告钩子函数，在每条测试用例的每个阶段都会自动被调用，（setup、call、teardown阶段）
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
