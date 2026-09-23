@@ -44,6 +44,7 @@ def pytest_runtest_makereport(item, call):
     except Exception as exc:
         # AI diagnosis is optional and must never hide the original test error.
         print(f"\n[AI 分析不可用] {exc}")
+
 @pytest.fixture(scope="session")
 def config():
     return load_config("test")
