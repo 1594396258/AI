@@ -28,7 +28,7 @@ Python pytest
 - 数据库状态、通道订单号、金额、通知状态校验。
 - 测试证据保存、AI 失败分析和 Markdown 报告。
 
-`ppp_demo` 只是学习状态机的教学代码。正式测试必须调用真实 Java。
+正式测试始终调用真实 Java；框架中不保留 Fake 被测系统。
 
 ## 2. 职责分工
 
@@ -72,7 +72,6 @@ payment_python_tests/
   services/                     校验、场景、证据服务
   ai/                           AI 配置审查和失败分析
   reports/                      Markdown 报告
-  payment_auto_framework/       旧代码兼容层，新代码不要导入
   tests/                         框架和业务测试
   tests/live/                    真实环境测试，默认跳过
   ai_samples/                    脱敏通道报文样例

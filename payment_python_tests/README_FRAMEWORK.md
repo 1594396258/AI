@@ -17,14 +17,13 @@ ai/                        AI 配置草稿和失败分析
 reports/                   Markdown 报告
 contracts/                 通道差异配置
 tests/                     单元、契约和真实环境测试
-payment_auto_framework/    旧代码兼容入口，新代码不要使用
 ```
 
 ## 先跑框架自身测试
 
 ```powershell
 cd "D:\PyCharm 2025.2.3\AI"
-pip install -r payment_python_tests\requirements-framework.txt
+pip install -r payment_python_tests\requirements.txt
 python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\tests\test_framework_contract.py
 ```
 

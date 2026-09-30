@@ -46,9 +46,10 @@ def test_ppp_static_callback_rejects_wrong_amount(live_context):
         "utr": "AUTO-WRONG-AMOUNT",
     }
     payload["hash"] = hmac_sha256_sorted_values(payload, secret)
-    response = PaymentApi(settings, evidence).send_static_callback(
-        contract.callback["endpoint"], order_no, payload
-    )
+    with PaymentApi(settings, evidence) as payment_api:
+        response = payment_api.send_static_callback(
+            contract.callback["endpoint"], order_no, payload
+        )
 
     assert response.status_code == 400
     assert response.text == "FAIL"

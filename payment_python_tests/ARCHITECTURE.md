@@ -40,7 +40,7 @@ from payment_python_tests.cache.redis_client import RedisClient
 from payment_python_tests.utils.sign_utils import hmac_sha256_sorted_values
 ```
 
-`payment_auto_framework/` 仅用于兼容之前已经生成的代码。新测试不得从该目录导包。
+项目只保留上述标准分层，不提供第二套兼容实现。
 
 ## HTTP 客户端规范
 
@@ -49,6 +49,7 @@ from payment_python_tests.utils.sign_utils import hmac_sha256_sorted_values
 - 业务路径和报文构造放在子类，例如 `PaymentApi`。
 - 业务断言不能写进 `BaseApi`。
 - 日志必须经过脱敏，不能打印密钥、签名、卡号和 Token。
+- `tests/` 禁止直接导入 `requests`，必须通过 `BaseApi` 或业务 API 子类发送请求。
 
 ## 数据访问规范
 

@@ -38,23 +38,17 @@ def payment_api(app_settings, evidence_store):
 
 
 @pytest.fixture
-def settings(app_settings, ppp_contract):
-    """Legacy dictionary fixture retained for the original example tests."""
-    return {
-        "base_url": app_settings.payment.base_url,
-        "mch_id": app_settings.merchant.merchant_id,
-        "mch_private_key": app_settings.merchant.private_key,
-        "service": ppp_contract.service,
-        "query_service": ppp_contract.query_service,
-        "order_no": "",
-        "notify_url": "",
-        "timeout": app_settings.payment.timeout,
-    }
-
-
-@pytest.fixture
-def live_required(settings, app_settings):
-    required = ["base_url", "mch_id", "service", "query_service"]
-    missing = [name for name in required if not settings[name]]
+def live_required(app_settings, ppp_contract):
+    missing = []
+    if not app_settings.payment.base_url:
+        missing.append("PAYMENT_BASE_URL")
+    if not app_settings.merchant.merchant_id:
+        missing.append("MCH_ID")
+    if not app_settings.merchant.private_key:
+        missing.append("MCH_PRIVATE_KEY")
+    if not ppp_contract.service:
+        missing.append("PPP service")
+    if not ppp_contract.query_service:
+        missing.append("PPP query service")
     if missing or not app_settings.runtime.run_live_tests:
         pytest.skip("未启用真实测试，请配置 .env 并设置 RUN_LIVE_TESTS=true")
