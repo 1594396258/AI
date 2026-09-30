@@ -1,15 +1,5 @@
-from __future__ import annotations
+"""Backward-compatible redaction import."""
 
-from typing import Any
+from payment_python_tests.utils.redact_utils import SENSITIVE_FIELDS, redact
 
-
-SENSITIVE_FIELDS = {"authorization", "cookie", "set-cookie", "hash", "signature", "pin", "secretkey", "password", "bankcardno", "customeraccno", "customermobile", "customername", "customeremail", "bankaccount", "mobileNumber".lower()}
-
-
-def redact(value: Any) -> Any:
-    """Remove credentials and personal data before writing HTTP evidence to disk."""
-    if isinstance(value, dict):
-        return {key: "***" if str(key).lower() in SENSITIVE_FIELDS else redact(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [redact(item) for item in value]
-    return value
+__all__ = ["SENSITIVE_FIELDS", "redact"]

@@ -60,19 +60,19 @@ AI负责：
 payment_python_tests/
   contracts/                    通道契约配置
     ppp.yaml                     PPP 标准样板
-  payment_auto_framework/
-    payment_client.py            真实 Java 商户接口客户端
-    fixtures.py                  Mock 通道和 Mock 商户
-    database.py                  FIN_PAY_ORDER 只读查询
-    validation.py                通道响应、查询、回调一致性校验
-    outbound_validation.py       Java 发给通道的请求校验
-    signing.py                   RSA、HMAC 签名
-    waiting.py                   异步限时轮询
-    scenarios.py                 业务场景封装
-    evidence.py                  SQLite 测试证据
-    redaction.py                 证据脱敏
-    ai_assistant.py              AI 配置审查和失败分析
-    reporting.py                 Markdown 报告
+  api/                          HTTP 基类和支付 API
+    base_api.py                  GET/POST/PUT/DELETE/PATCH 基类
+    payment_api.py               真实 Java 商户接口客户端
+  config/                       YAML、.env 和通道契约加载
+  database/                     MySQL 客户端和订单 Repository
+  cache/                        Redis 客户端
+  models/                       通道契约、订单模型
+  utils/                        签名、轮询、脱敏工具
+  mocks/                        Mock 通道和 Mock 商户
+  services/                     校验、场景、证据服务
+  ai/                           AI 配置审查和失败分析
+  reports/                      Markdown 报告
+  payment_auto_framework/       旧代码兼容层，新代码不要导入
   tests/                         框架和业务测试
   tests/live/                    真实环境测试，默认跳过
   ai_samples/                    脱敏通道报文样例
@@ -85,23 +85,14 @@ payment_python_tests/
 要求 Python 3.10 或更高版本。PowerShell 执行：
 
 ```powershell
-cd "D:\PyCharm 2025.2.3\AI\payment_python_tests"
+cd "D:\PyCharm 2025.2.3\AI"
 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-pip install -e .
+pip install -r payment_python_tests\requirements.txt
 ```
-
-`pip install -e .` 会把 `payment_auto_framework` 以可编辑模式注册到当前 Python 环境。缺少这一步时，如果从项目上级目录或 PyCharm 单独运行测试，可能出现：
-
-```text
-ModuleNotFoundError: No module named 'payment_auto_framework'
-```
-
-可编辑安装不会复制源码；后续修改本地代码会立即生效。
 
 如果 PowerShell 禁止激活虚拟环境，可仅对当前窗口执行：
 
@@ -112,7 +103,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 ## 5. 先验证框架本身
 
 ```powershell
-python -m pytest -q -c pytest.ini
+python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\tests
 ```
 
 未配置真实环境时，正常结果应类似：
@@ -128,7 +119,7 @@ python -m pytest -q -c pytest.ini
 复制环境变量模板：
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item payment_python_tests\.env.example payment_python_tests\.env
 ```
 
 常用配置：
@@ -145,6 +136,14 @@ DB_PORT=3306
 DB_NAME=测试数据库名
 DB_USER=只读账号
 DB_PASSWORD=只读账号密码
+DB_CHARSET=utf8mb4
+
+REDIS_HOST=测试Redis地址
+REDIS_PORT=6379
+REDIS_PASSWORD=测试Redis密码
+REDIS_DB=0
+REDIS_PROTOCOL=2
+REDIS_KEY_PREFIX=payment-auto:
 
 RUN_LIVE_TESTS=false
 ```
@@ -157,14 +156,72 @@ RUN_LIVE_TESTS=false
 - 禁止把生产卡号、姓名、手机号和密钥送给 AI。
 - 准备发送代付前再次检查 `PAYMENT_BASE_URL`，确认不是生产地址。
 
-## 7. 启动 Mock PPP 和 Mock 商户
+## 7. 标准基础层使用方式
+
+所有业务 API 都继承统一 HTTP 基类：
+
+```python
+from payment_python_tests.api.base_api import BaseApi
+
+
+class ExampleChannelApi(BaseApi):
+    def create_order(self, body: dict):
+        response = self.post("orders", json=body)
+        response.raise_for_status()
+        return response.json()
+```
+
+`BaseApi` 已统一封装：
+
+```text
+GET / POST / PUT / DELETE / PATCH
+requests.Session
+公共请求头和 Bearer Token
+超时
+URL 拼接
+请求、响应日志及敏感字段脱敏
+```
+
+数据库统一通过 Client 和 Repository 两层使用：
+
+```python
+from payment_python_tests.config.settings import AppSettings
+from payment_python_tests.database.mysql_client import MysqlClient
+from payment_python_tests.database.order_repository import OrderRepository
+
+settings = AppSettings.from_env()
+
+with MysqlClient(settings.database) as mysql:
+    orders = OrderRepository(mysql)
+    order = orders.get_by_out_order_no("商户msgId")
+```
+
+`MysqlClient` 默认只读。需要写数据库时必须显式传入 `allow_write=True`，普通业务自动化禁止开启。
+
+Redis 统一使用：
+
+```python
+from payment_python_tests.cache.redis_client import RedisClient
+from payment_python_tests.config.settings import AppSettings
+
+settings = AppSettings.from_env()
+cache = RedisClient(settings.redis)
+
+cache.set_json("order:ORDER-001", {"status": "PROCESSING"}, expire_seconds=60)
+data = cache.get_json("order:ORDER-001")
+cache.close()
+```
+
+所有自动化 Redis key 必须配置 `REDIS_KEY_PREFIX`，不能直接使用业务系统的公共 key。
+
+## 8. 启动 Mock PPP 和 Mock 商户
 
 推荐在测试文件中使用固定端口 fixture：
 
 ```python
 import pytest
 
-from payment_auto_framework.fixtures import MockMerchantServer, MockPppServer
+from payment_python_tests.mocks import MockMerchantServer, MockPppServer
 
 
 @pytest.fixture(scope="session")
@@ -198,7 +255,7 @@ http://测试机IP:19090/merchant/notify
 
 PPP 的通道配置 `notifyUrl` 如果会覆盖商户请求中的 `notifyUrl`，也必须指向 Mock 商户。
 
-## 8. PPP 第一条完整用例
+## 9. PPP 第一条完整用例
 
 第一条用例只验证成功主链路：
 
@@ -247,7 +304,7 @@ payment_client.create_payout(
 使用商户 `msgId` 查找平台订单，不要查询“最新一条”：
 
 ```python
-from payment_auto_framework.waiting import wait_until
+from payment_python_tests.utils.wait_utils import wait_until
 
 db_order = wait_until(
     lambda: order_repository.get_by_out_order_no(msg_id),
@@ -257,7 +314,7 @@ db_order = wait_until(
 )
 ```
 
-## 9. 校验 Java 发给通道的请求参数
+## 10. 校验 Java 发给通道的请求参数
 
 从 Mock PPP 读取 Java 实际请求：
 
@@ -273,7 +330,7 @@ channel_request = wait_until(
 执行出站契约校验：
 
 ```python
-from payment_auto_framework.outbound_validation import assert_valid_outbound_request
+from payment_python_tests.services.validation_service import assert_valid_outbound_request
 
 assert_valid_outbound_request(
     contract,
@@ -305,7 +362,7 @@ PPP 契约当前会检查：
 - Bearer Token、Content-Type 和 HMAC-SHA256 签名。
 - `notifyUrl`、`callbackUrl` 等禁止字段是否被错误发送。
 
-## 10. 查询请求校验
+## 11. 查询请求校验
 
 PPP 查询是 GET，请求 URL 最后一段必须使用数据库中的 `TRANSACTION_ID`：
 
@@ -334,7 +391,7 @@ assert_valid_outbound_request(
 
 注意 PPP 源码限制下单满两分钟后才查询通道。外部查询对非终态订单可能直接返回本地状态，因此查询用例需要区分“外部查询”和“内部自动查询”。
 
-## 11. 通道回调测试
+## 12. 通道回调测试
 
 PPP 使用静态回调：
 
@@ -345,7 +402,7 @@ POST /ppp/disburse/notify
 正确签名回调：
 
 ```python
-from payment_auto_framework.signing import hmac_sha256_sorted_values
+from payment_python_tests.utils.sign_utils import hmac_sha256_sorted_values
 
 callback = {
     "status": "success",
@@ -384,7 +441,7 @@ assert response.text == "SUCCESS"
 商户没有收到错误通知
 ```
 
-## 12. 商户通知校验
+## 13. 商户通知校验
 
 等待商户通知，不使用固定 `sleep`：
 
@@ -408,7 +465,7 @@ assert notice["body"]["trxState"] == "SUCCESS"
 - 商户第一次返回失败时会重试。
 - 最终 `NOTIFY_STATE` 与通知结果一致。
 
-## 13. 数据库校验
+## 14. 数据库校验
 
 框架默认只读查询 `FIN_PAY_ORDER`：
 
@@ -433,7 +490,7 @@ assert order.channel_amount == 10000
 
 不要在公共测试环境自动删除订单。每条测试使用唯一 `msgId`，避免数据互相影响。
 
-## 14. 使用 AI 生成新通道配置初稿
+## 15. 使用 AI 生成新通道配置初稿
 
 先把通道下单、查询和回调样例脱敏，保存为 JSON 数组：
 
@@ -451,10 +508,10 @@ assert order.channel_amount == 10000
 生成 YAML 初稿：
 
 ```powershell
-python -m payment_auto_framework draft `
-  ai_samples/newpay_samples.json `
+python -m payment_python_tests draft `
+  payment_python_tests/ai_samples/newpay_samples.json `
   --channel newpay `
-  --output contracts/newpay.yaml
+  --output payment_python_tests/contracts/newpay.yaml
 ```
 
 配置 AI 模型后增加审查：
@@ -466,10 +523,10 @@ AI_MODEL=模型名称
 ```
 
 ```powershell
-python -m payment_auto_framework draft `
-  ai_samples/newpay_samples.json `
+python -m payment_python_tests draft `
+  payment_python_tests/ai_samples/newpay_samples.json `
   --channel newpay `
-  --output contracts/newpay.yaml `
+  --output payment_python_tests/contracts/newpay.yaml `
   --ai
 ```
 
@@ -481,7 +538,7 @@ AI 生成结果中的 `REVIEW_REQUIRED` 必须人工确认。尤其不能让 AI 
 - 通道成功 ACK。
 - 字段到底来自商户请求、数据库还是通道配置。
 
-## 15. 新通道接入步骤
+## 16. 新通道接入步骤
 
 1. 收集并脱敏通道文档和报文样例。
 2. 使用 AI 生成 `contracts/newpay.yaml` 初稿。
@@ -496,7 +553,7 @@ AI 生成结果中的 `REVIEW_REQUIRED` 必须人工确认。尤其不能让 AI 
 
 不建议复制 PPP 的整套代码修改字段。正确方式是新增一个通道 YAML 和少量特殊适配逻辑，公共校验继续复用。
 
-## 16. 失败证据和报告
+## 17. 失败证据和报告
 
 测试证据包括：
 
@@ -513,26 +570,26 @@ Java 回调 ACK
 敏感字段在写入证据前会自动遮盖。生成失败分析：
 
 ```powershell
-python -m payment_auto_framework analyze artifacts/evidence.json
+python -m payment_python_tests analyze payment_python_tests/artifacts/evidence.json
 ```
 
 使用 AI 增强分析：
 
 ```powershell
-python -m payment_auto_framework analyze artifacts/evidence.json --ai
+python -m payment_python_tests analyze payment_python_tests/artifacts/evidence.json --ai
 ```
 
 生成 Markdown 报告：
 
 ```powershell
-python -m payment_auto_framework report `
-  artifacts/evidence.json `
-  --output reports/ppp-report.md
+python -m payment_python_tests report `
+  payment_python_tests/artifacts/evidence.json `
+  --output payment_python_tests/reports/ppp-report.md
 ```
 
 AI 分析只提供排查方向，原始请求、数据库状态和断言结果才是测试结论依据。
 
-## 17. 通道准入最低标准
+## 18. 通道准入最低标准
 
 新通道至少需要通过：
 
@@ -549,7 +606,7 @@ AI 分析只提供排查方向，原始请求、数据库状态和断言结果�
 - 测试失败能够提供完整证据链。
 - 至少完成一条真实通道冒烟测试。
 
-## 18. 常见问题
+## 19. 常见问题
 
 ### Java 没有请求 Mock PPP
 
@@ -587,42 +644,41 @@ PATH_MISMATCH               查询 URL 或通道订单号错误
 必须在 `payment_python_tests` 目录执行并指定本目录配置：
 
 ```powershell
-python -m pytest -q -c pytest.ini
+python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\tests
 ```
 
 本目录使用 `--confcutdir=.`，不会加载上层项目的自动登录 fixture。
 
-### PyCharm 提示找不到 payment_auto_framework
+### PyCharm 提示找不到 payment_python_tests
 
-先在 PyCharm Terminal 中确认位于框架目录，然后执行：
+先确认 PyCharm 项目根目录是 `D:\PyCharm 2025.2.3\AI`，然后执行：
 
 ```powershell
-cd "D:\PyCharm 2025.2.3\AI\payment_python_tests"
-pip install -e .
-python -c "from payment_auto_framework.contracts import load_contract; print('import ok')"
+cd "D:\PyCharm 2025.2.3\AI"
+python -c "from payment_python_tests.config.contract_loader import load_contract; print('import ok')"
 ```
 
-如果命令成功但编辑器仍然标红，检查 PyCharm Project Interpreter 是否选择了执行安装命令时使用的同一个 Python；推荐选择 `.venv\Scripts\python.exe`。
+如果命令成功但编辑器仍然标红，检查 PyCharm 的项目根目录和 Project Interpreter。推荐解释器为 `D:\PyCharm 2025.2.3\AI\.venv\Scripts\python.exe`。
 
-## 19. 推荐日常命令
+## 20. 推荐日常命令
 
 只跑框架测试：
 
 ```powershell
-python -m pytest -q -c pytest.ini -m "not live"
+python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\tests -m "not live"
 ```
 
 运行真实环境测试：
 
 ```powershell
 $env:RUN_LIVE_TESTS="true"
-python -m pytest -q -c pytest.ini -m live
+python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\tests -m live
 ```
 
 运行单个用例并显示详细日志：
 
 ```powershell
-python -m pytest -vv -s -c pytest.ini tests/live/test_ppp_real_java.py
+python -m pytest -vv -s -c payment_python_tests\pytest.ini payment_python_tests/tests/live/test_ppp_real_java.py
 ```
 
 真实用例执行完成后及时关闭：
@@ -631,7 +687,7 @@ python -m pytest -vv -s -c pytest.ini tests/live/test_ppp_real_java.py
 $env:RUN_LIVE_TESTS="false"
 ```
 
-## 20. 操作原则
+## 21. 操作原则
 
 请始终遵守：
 

@@ -4,11 +4,11 @@ from pathlib import Path
 import pytest
 from dotenv import load_dotenv
 
-from payment_auto_framework.contracts import load_contract
-from payment_auto_framework.evidence import EvidenceStore
-from payment_auto_framework.payment_client import PaymentClient
-from payment_auto_framework.settings import Settings
-from payment_auto_framework.signing import hmac_sha256_sorted_values
+from payment_python_tests.api.payment_api import PaymentApi
+from payment_python_tests.config.contract_loader import load_contract
+from payment_python_tests.config.settings import AppSettings
+from payment_python_tests.services.evidence_service import EvidenceStore
+from payment_python_tests.utils.sign_utils import hmac_sha256_sorted_values
 
 
 ROOT = Path(__file__).parents[2]
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.live
 def live_context(tmp_path):
     if os.getenv("RUN_LIVE_TESTS", "false").lower() != "true":
         pytest.skip("设置 RUN_LIVE_TESTS=true 后才会调用真实 Java")
-    settings = Settings.from_env()
+    settings = AppSettings.from_env()
     settings.require_live_payment()
     evidence = EvidenceStore(tmp_path / "evidence.db")
     yield settings, load_contract(ROOT / "contracts" / "ppp.yaml"), evidence
@@ -46,7 +46,7 @@ def test_ppp_static_callback_rejects_wrong_amount(live_context):
         "utr": "AUTO-WRONG-AMOUNT",
     }
     payload["hash"] = hmac_sha256_sorted_values(payload, secret)
-    response = PaymentClient(settings, evidence).send_static_callback(
+    response = PaymentApi(settings, evidence).send_static_callback(
         contract.callback["endpoint"], order_no, payload
     )
 

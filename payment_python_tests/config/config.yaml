@@ -1,0 +1,16 @@
+test:
+  payment:
+    base_url: http://127.0.0.1:9012/finance-payment-service/v1
+    timeout: 15
+  database:
+    port: 3306
+    charset: utf8mb4
+  redis:
+    port: 6379
+    db: 0
+    decode_responses: true
+    protocol: 2
+  ai:
+    base_url: https://api.openai.com/v1
+  runtime:
+    run_live_tests: false

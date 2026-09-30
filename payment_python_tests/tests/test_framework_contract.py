@@ -2,15 +2,17 @@ from pathlib import Path
 
 import pytest
 
-from payment_auto_framework.ai_assistant import analyze_failure, generate_contract_draft
-from payment_auto_framework.contracts import load_contract
-from payment_auto_framework.evidence import EvidenceStore
-from payment_auto_framework.fixtures import MockMerchantServer, MockPppServer
-from payment_auto_framework.outbound_validation import validate_outbound_request
-from payment_auto_framework.reporting import build_markdown_report
-from payment_auto_framework.redaction import redact
-from payment_auto_framework.signing import hmac_sha256_sorted_values
-from payment_auto_framework.validation import validate_channel_payload
+from payment_python_tests.config.contract_loader import load_contract
+from payment_python_tests.mocks import MockMerchantServer, MockPppServer
+from payment_python_tests.ai.assistant import analyze_failure, generate_contract_draft
+from payment_python_tests.reports.report_builder import build_markdown_report
+from payment_python_tests.services.evidence_service import EvidenceStore
+from payment_python_tests.services.validation_service import (
+    validate_channel_payload,
+    validate_outbound_request,
+)
+from payment_python_tests.utils.redact_utils import redact
+from payment_python_tests.utils.sign_utils import hmac_sha256_sorted_values
 
 
 ROOT = Path(__file__).parents[1]

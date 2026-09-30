@@ -1,5 +1,5 @@
-from payment_auto_framework.signing import hmac_sha256_sorted_values
-from payment_auto_framework.waiting import wait_until
+from payment_python_tests.utils.sign_utils import hmac_sha256_sorted_values
+from payment_python_tests.utils.wait_utils import wait_until
 
 
 def test_hmac_is_deterministic():

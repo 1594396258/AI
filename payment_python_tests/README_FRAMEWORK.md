@@ -1,33 +1,31 @@
 # 可复用支付通道自动化框架
 
-这个目录把测试拆成四层：
+详细的目录职责、依赖方向和导包规范见 `ARCHITECTURE.md`。
+
+框架按职责分层：
 
 ```text
-contracts/                 通道差异配置（字段、金额单位、状态、签名）
-payment_auto_framework/
-  contracts.py             配置模型
-  validation.py            下单/查询/回调共用的金额、订单号校验
-  outbound_validation.py   Java 发给通道的请求字段、来源、转换、头和签名校验
-  redaction.py           出站证据落盘前遮盖密钥、卡号和个人信息
-  signing.py               RSA、HMAC 签名工具
-  payment_client.py        真实 Java 商户接口和回调客户端
-  fixtures.py              Mock PPP、Mock 商户（按订单配置行为）
-  database.py              只读 FIN_PAY_ORDER 查询
-  waiting.py               限时轮询，不使用固定 sleep
-  scenarios.py             把长链路压缩成业务步骤
-  evidence.py              SQLite 请求、响应、回调、数据库证据
-  ai_assistant.py          配置初稿和失败分析；模型调用是可选的
-  cli.py                   AI 辅助命令行
-tests/                     框架自身契约测试和真实环境测试
+api/                       HTTP 基类和支付 API
+config/                    YAML、环境变量、通道契约加载
+database/                  MySQL 客户端和订单 Repository
+cache/                     Redis 客户端
+models/                    通道和订单数据模型
+utils/                     签名、轮询、脱敏
+mocks/                     PPP 和商户 Mock
+services/                  校验、场景、证据
+ai/                        AI 配置草稿和失败分析
+reports/                   Markdown 报告
+contracts/                 通道差异配置
+tests/                     单元、契约和真实环境测试
+payment_auto_framework/    旧代码兼容入口，新代码不要使用
 ```
 
 ## 先跑框架自身测试
 
 ```powershell
-cd D:\PyCharm 2025.2.3\AI\payment_python_tests
-pip install -r requirements-framework.txt
-pip install -e .
-python -m pytest -q tests/test_framework_contract.py
+cd "D:\PyCharm 2025.2.3\AI"
+pip install -r payment_python_tests\requirements-framework.txt
+python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\tests\test_framework_contract.py
 ```
 
 这些测试不需要 Java、MQ 或数据库，验证框架的配置解析、字段校验、Mock 服务和证据分析。
@@ -37,7 +35,7 @@ python -m pytest -q tests/test_framework_contract.py
 先将通道文档中的请求、查询、回调样例脱敏，保存为 JSON 数组：
 
 ```powershell
-python -m payment_auto_framework draft ai_samples/ppp_samples.json --channel ppp --output contracts/ppp.generated.yaml
+python -m payment_python_tests draft payment_python_tests/ai_samples/ppp_samples.json --channel ppp --output payment_python_tests/contracts/ppp.generated.yaml
 ```
 
 初稿必须人工确认：真实 service 常量、字段含义、币种单位、状态映射、签名原文规则和 ACK。AI 只生成草稿，不能决定测试通过与否。
@@ -47,7 +45,7 @@ python -m payment_auto_framework draft ai_samples/ppp_samples.json --channel ppp
 测试会把商户请求、Java 响应、通道回调、ACK、数据库快照写入 `artifacts/evidence.db`。导出为 JSON 后可运行：
 
 ```powershell
-python -m payment_auto_framework analyze artifacts/evidence.json
+python -m payment_python_tests analyze payment_python_tests/artifacts/evidence.json
 ```
 
 本地规则会先判断是否缺少回调、数据库或商户通知证据；企业批准的模型网关可以在 `ai_assistant.py` 的 `ask_llm` 中接入，用于对完整证据做自然语言归因。
@@ -55,16 +53,16 @@ python -m payment_auto_framework analyze artifacts/evidence.json
 配置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 后，可显式增加 `--ai`：
 
 ```powershell
-python -m payment_auto_framework draft ai_samples/ppp_samples.json --channel ppp --output contracts/ppp.generated.yaml --ai
-python -m payment_auto_framework analyze artifacts/evidence.json --ai
-python -m payment_auto_framework report artifacts/evidence.json --output reports/ppp-report.md
+python -m payment_python_tests draft payment_python_tests/ai_samples/ppp_samples.json --channel ppp --output payment_python_tests/contracts/ppp.generated.yaml --ai
+python -m payment_python_tests analyze payment_python_tests/artifacts/evidence.json --ai
+python -m payment_python_tests report payment_python_tests/artifacts/evidence.json --output payment_python_tests/reports/ppp-report.md
 ```
 
 模型不会在 pytest 中自动调用，避免网络波动、费用和非确定性影响回归结果。送入模型前仍要对账号、姓名、卡号、手机号、密钥和生产数据脱敏。
 
 ## 接入真实 Java
 
-复制 `.env.example` 为 `.env`，填写商户 RSA 私钥、响应验签公钥和测试数据库连接。`PaymentClient` 调用的是被测 Java `/disburse`、`/disburse/query`、`/disburse/notifyv2/{service}@{orderNo}`，不会把 Java 系统替换成 Fake。
+复制 `.env.example` 为 `.env`，填写商户 RSA 私钥、响应验签公钥和测试数据库连接。`PaymentApi` 调用的是被测 Java `/disburse`、`/disburse/query`、`/disburse/notifyv2/{service}@{orderNo}`，不会把 Java 系统替换成 Fake。
 
 数据库表当前按源码确认使用 `FIN_PAY_ORDER`，字段为 `ORDER_NO`、`TRADE_STATE`、`TRANSACTION_ID`、`AMOUNT`、`CHANNEL_AMOUNT`、`NOTIFY_STATE`。数据库账号、密码和环境必须由测试环境提供，不能写进仓库。
 
