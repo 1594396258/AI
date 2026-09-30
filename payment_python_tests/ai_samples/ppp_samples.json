@@ -1,0 +1,5 @@
+[
+  {"merchantOrderId": "ORDER-001", "transactionId": "PPP-001", "amount": "100.00", "status": "pending"},
+  {"merchantOrderId": "ORDER-001", "transactionId": "PPP-001", "amount": "100.00", "status": "success"},
+  {"merchantOrderId": "ORDER-001", "transactionId": "PPP-001", "amount": "100.00", "status": "failed"}
+]

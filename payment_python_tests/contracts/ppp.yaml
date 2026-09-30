@@ -1,0 +1,82 @@
+channel: ppp
+service: pay.ppppay.disburse
+query_service: unified.disburse.query
+identity:
+  local_order_field: merchantOrderId
+  channel_order_field: transactionId
+amount:
+  field: amount
+  unit: yuan
+status:
+  field: status
+  mapping:
+    initiated: PROCESSING
+    pending: PROCESSING
+    disputed: PROCESSING
+    success: SUCCESS
+    failed: FAIL
+signature:
+  algorithm: HMAC-SHA256
+  field: hash
+  delimiter: "|"
+outbound_request:
+  method: POST
+  path_prefix: /v1/payouts/
+  body:
+    amount:
+      source: merchant.inrQuantity
+      transform: minor_to_major_2
+    currencyKey:
+      constant: inr
+    customerAccNo:
+      source: merchant.bankCardNo
+    customerEmail:
+      pattern: '^WLT[0-9]{8}_[0-9]{7,8}@gmail[.]com$'
+    customerIfsc:
+      source: merchant.bankCode
+    customerMobile:
+      source: merchant.mobileNumber
+    customerName:
+      source: merchant.bankAccount
+    merchantIdentifier:
+      source: channel_config.payMerchant
+    merchantOrderId:
+      source: database.orderNo
+    transactionModeKey:
+      constant: imps
+    hash:
+      validator: hmac_sha256_sorted_values
+  headers:
+    Authorization:
+      source: channel_config.pin
+      prefix: 'Bearer '
+      sensitive: true
+    Content-Type:
+      constant: application/json
+  forbidden_fields:
+    - notifyUrl
+    - callbackUrl
+    - personIp
+    - customerAddress
+    - remark
+outbound_query:
+  method: GET
+  path_prefix: /v1/payouts/status/
+  path_suffix_source: database.transactionId
+  headers:
+    Authorization:
+      source: channel_config.pin
+      prefix: 'Bearer '
+      sensitive: true
+    Content-Type:
+      constant: application/json
+callback:
+  route_mode: static
+  endpoint: /ppp/disburse/notify
+  success_ack: SUCCESS
+required_fields:
+  - status
+  - merchantOrderId
+  - transactionId
+  - amount
+  - hash
