@@ -2,7 +2,7 @@
 
 这套测试按黑盒方式调用真实 Java 支付系统。外部通道和商户通知使用可控 Mock，数据库只读验证；公共字段、状态、幂等和通知规则由通道契约复用。
 
-完整框架说明见 `README_FRAMEWORK.md`，新增通道步骤见 `NEW_CHANNEL_GUIDE.md`。`ppp_demo` 仅用于学习状态机，不代表真实系统测试。
+可直接发给使用人员的完整操作手册见 `PAYMENT_AUTOMATION_USER_GUIDE.md`。框架设计说明见 `README_FRAMEWORK.md`，新增通道检查表见 `NEW_CHANNEL_GUIDE.md`。`ppp_demo` 仅用于学习状态机，不代表真实系统测试。
 
 ## 运行
 

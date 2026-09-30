@@ -46,11 +46,11 @@ class RecordedHandler(BaseHTTPRequestHandler):
 
 
 class MockHttpServer:
-    def __init__(self, response_factory=None):
+    def __init__(self, response_factory=None, *, port: int = 0):
         self.handler = type(f"Handler{uuid.uuid4().hex}", (RecordedHandler,), {})
         self.handler.records = []
         self.handler.response_factory = response_factory
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), self.handler)
+        self.server = ThreadingHTTPServer(("127.0.0.1", port), self.handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
     @property
@@ -76,9 +76,9 @@ class MockHttpServer:
 
 
 class MockPppServer(MockHttpServer):
-    def __init__(self):
+    def __init__(self, *, port: int = 0):
         self.behaviors: dict[str, dict[str, Any]] = {}
-        super().__init__(self._respond)
+        super().__init__(self._respond, port=port)
 
     def configure(self, order_no: str, *, create_status: str = "pending", query_status: str = "success", amount: str = "100.00") -> None:
         self.behaviors[order_no] = {"create_status": create_status, "query_status": query_status, "amount": amount, "transaction_id": f"ppp-{order_no}"}
@@ -90,6 +90,8 @@ class MockPppServer(MockHttpServer):
         if not order_no and record["method"] == "GET":
             transaction_id = record["path"].rstrip("/").rsplit("/", 1)[-1]
             order_no = next((key for key, value in self.behaviors.items() if value["transaction_id"] == transaction_id), "")
+            if not order_no and transaction_id.startswith("ppp-"):
+                order_no = transaction_id.removeprefix("ppp-")
         behavior = self.behaviors.get(order_no, {"create_status": "pending", "query_status": "success", "amount": "100.00", "transaction_id": f"ppp-{order_no}"})
         is_query = record["method"] == "GET" or "query" in record["path"].lower() or "originalMsgId" in body
         return {"status": behavior["query_status"] if is_query else behavior["create_status"], "merchantOrderId": order_no, "transactionId": behavior["transaction_id"], "amount": behavior["amount"]}

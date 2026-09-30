@@ -41,8 +41,17 @@ class MysqlOrderRepository:
         self.connection = pymysql.connect(host=settings.database_host, port=settings.database_port, user=settings.database_user, password=settings.database_password, database=settings.database_name, charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor, autocommit=True)
 
     def get(self, order_no: str) -> OrderSnapshot | None:
+        return self._find("ORDER_NO", order_no)
+
+    def get_by_out_order_no(self, out_order_no: str) -> OrderSnapshot | None:
+        return self._find("OUT_ORDER_NO", out_order_no)
+
+    def _find(self, column: str, value: str) -> OrderSnapshot | None:
+        if column not in {"ORDER_NO", "OUT_ORDER_NO"}:
+            raise ValueError("unsupported order lookup column")
+        query = self.QUERY.replace("ORDER_NO = %s", f"{column} = %s")
         with self.connection.cursor() as cursor:
-            cursor.execute(self.QUERY, (order_no,))
+            cursor.execute(query, (value,))
             row = cursor.fetchone()
         if not row:
             return None
