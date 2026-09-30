@@ -26,6 +26,7 @@ tests/                     框架自身契约测试和真实环境测试
 ```powershell
 cd D:\PyCharm 2025.2.3\AI\payment_python_tests
 pip install -r requirements-framework.txt
+pip install -e .
 python -m pytest -q tests/test_framework_contract.py
 ```
 

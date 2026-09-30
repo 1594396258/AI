@@ -11,6 +11,7 @@ cd payment_python_tests
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+pip install -e .
 Copy-Item .env.example .env
 # 编辑 .env，填写测试环境参数
 pytest -q

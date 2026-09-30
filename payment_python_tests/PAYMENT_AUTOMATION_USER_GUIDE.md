@@ -92,7 +92,16 @@ python -m venv .venv
 
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+pip install -e .
 ```
+
+`pip install -e .` 会把 `payment_auto_framework` 以可编辑模式注册到当前 Python 环境。缺少这一步时，如果从项目上级目录或 PyCharm 单独运行测试，可能出现：
+
+```text
+ModuleNotFoundError: No module named 'payment_auto_framework'
+```
+
+可编辑安装不会复制源码；后续修改本地代码会立即生效。
 
 如果 PowerShell 禁止激活虚拟环境，可仅对当前窗口执行：
 
@@ -582,6 +591,18 @@ python -m pytest -q -c pytest.ini
 ```
 
 本目录使用 `--confcutdir=.`，不会加载上层项目的自动登录 fixture。
+
+### PyCharm 提示找不到 payment_auto_framework
+
+先在 PyCharm Terminal 中确认位于框架目录，然后执行：
+
+```powershell
+cd "D:\PyCharm 2025.2.3\AI\payment_python_tests"
+pip install -e .
+python -c "from payment_auto_framework.contracts import load_contract; print('import ok')"
+```
+
+如果命令成功但编辑器仍然标红，检查 PyCharm Project Interpreter 是否选择了执行安装命令时使用的同一个 Python；推荐选择 `.venv\Scripts\python.exe`。
 
 ## 19. 推荐日常命令
 
