@@ -2,6 +2,9 @@ test:
   payment:
     base_url: http://127.0.0.1:9012/finance-payment-service/v1
     timeout: 15
+    # 商户侧固定入口协议；路由方案决定实际落到哪个通道。
+    disburse_service: pay.cbtis.disburse
+    query_service: unified.disburse.query
   database:
     port: 3306
     charset: utf8mb4

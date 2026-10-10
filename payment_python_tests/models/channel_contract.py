@@ -8,8 +8,6 @@ from typing import Any
 @dataclass(frozen=True)
 class ChannelContract:
     name: str
-    service: str
-    query_service: str
     identity: dict[str, str]
     amount: dict[str, Any]
     status_mapping: dict[str, str]

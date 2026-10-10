@@ -6,9 +6,30 @@ from payment_python_tests.mocks.http_mock import MockHttpServer
 
 
 class MockPppServer(MockHttpServer):
-    def __init__(self, *, port: int = 0):
+    def __init__(
+        self,
+        *,
+        host: str = "127.0.0.1",
+        advertise_host: str | None = None,
+        port: int = 0,
+    ):
         self.behaviors: dict[str, dict[str, Any]] = {}
-        super().__init__(self._respond, port=port)
+        super().__init__(
+            self._respond,
+            host=host,
+            advertise_host=advertise_host,
+            port=port,
+        )
+
+    def payout_records(self, order_no: str) -> list[dict[str, Any]]:
+        return [
+            record
+            for record in self.records
+            if record.get("method") == "POST"
+            and record.get("path", "").endswith("/v1/payouts/")
+            and isinstance(record.get("body"), dict)
+            and record["body"].get("merchantOrderId") == order_no
+        ]
 
     def configure(
         self,

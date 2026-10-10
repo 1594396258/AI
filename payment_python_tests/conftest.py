@@ -38,7 +38,13 @@ def payment_api(app_settings, evidence_store):
 
 
 @pytest.fixture
-def live_required(app_settings, ppp_contract):
+def live_required(app_settings):
+    if not app_settings.runtime.run_live_tests:
+        pytest.skip(
+            "RUN_LIVE_TESTS 当前解析为 false；请在 payment_python_tests/.env "
+            "中配置 RUN_LIVE_TESTS=true（行尾注释前需要空格）"
+        )
+
     missing = []
     if not app_settings.payment.base_url:
         missing.append("PAYMENT_BASE_URL")
@@ -46,9 +52,9 @@ def live_required(app_settings, ppp_contract):
         missing.append("MCH_ID")
     if not app_settings.merchant.private_key:
         missing.append("MCH_PRIVATE_KEY")
-    if not ppp_contract.service:
-        missing.append("PPP service")
-    if not ppp_contract.query_service:
-        missing.append("PPP query service")
-    if missing or not app_settings.runtime.run_live_tests:
-        pytest.skip("未启用真实测试，请配置 .env 并设置 RUN_LIVE_TESTS=true")
+    if not app_settings.payment.disburse_service:
+        missing.append("payment.disburse_service")
+    if not app_settings.payment.query_service:
+        missing.append("payment.query_service")
+    if missing:
+        pytest.skip("真实测试缺少配置：" + ", ".join(missing))

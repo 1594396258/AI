@@ -37,7 +37,7 @@ class BaseApi:
 
     def request(self, method: str, path: str, **kwargs: Any) -> requests.Response:
         url = urljoin(self.base_url, path.lstrip("/"))
-        timeout = kwargs.pop("timeout", self.timeout)
+        timeout = kwargs.pop("timeout", self.timeout)  # pop会返回key对应的value值，如果字典里有该key，则删除并返回该value，如果没有该key，则默认值为self.timeout
         log_data = {
             "method": method.upper(),
             "url": url,

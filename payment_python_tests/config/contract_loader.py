@@ -12,8 +12,6 @@ def load_contract(path: str | Path) -> ChannelContract:
     status = raw.get("status", {})
     return ChannelContract(
         name=raw["channel"],
-        service=raw.get("service", ""),
-        query_service=raw.get("query_service", ""),
         identity=raw.get("identity", {}),
         amount=raw.get("amount", {}),
         status_mapping=status.get("mapping", raw.get("status_mapping", {})),

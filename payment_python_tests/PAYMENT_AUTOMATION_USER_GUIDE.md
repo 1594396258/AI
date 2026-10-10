@@ -294,7 +294,6 @@ merchant_data = {
 msg_id = payment_client.new_message_id("PPP")
 
 payment_client.create_payout(
-    contract.service,
     msgId=msg_id,
     **merchant_data,
 )
@@ -679,6 +678,27 @@ python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\test
 ```powershell
 python -m pytest -vv -s -c payment_python_tests\pytest.ini payment_python_tests/tests/live/test_ppp_real_java.py
 ```
+
+验证 Java 实际发给 PPP 的下单请求：
+
+```dotenv
+PPP_MOCK_ENABLED=true
+PPP_MOCK_BIND_HOST=127.0.0.1
+PPP_MOCK_ADVERTISE_HOST=127.0.0.1
+PPP_MOCK_PORT=18080
+PPP_JAVA_DISBURSE_URL=http://127.0.0.1:18080/v1/payouts/
+PPP_PAY_MERCHANT=与Java通道配置一致
+PPP_PIN=与Java通道配置一致
+PPP_TEST_SECRET=与Java通道配置一致
+```
+
+同时把 Java 的 `pay.gateway.third.pppDisburseUrl` 配置为 `PPP_JAVA_DISBURSE_URL`，并确保路由方案只选择 PPP。然后运行：
+
+```powershell
+python -m pytest -vv -s -c payment_python_tests\pytest.ini payment_python_tests\tests\live\test_ppp_real_outbound.py
+```
+
+这条用例校验的是 Mock PPP 真正收到的 Java 请求，不是测试代码手工构造的请求。Java 在远程环境时，Mock 不能使用 `127.0.0.1`，必须填写 Java 可访问的测试机 IP。
 
 真实用例执行完成后及时关闭：
 

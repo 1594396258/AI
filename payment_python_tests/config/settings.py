@@ -25,6 +25,8 @@ def _as_bool(value: Any) -> bool:
 class PaymentSettings:
     base_url: str
     timeout: float
+    disburse_service: str
+    query_service: str
 
 
 @dataclass(frozen=True)
@@ -167,8 +169,8 @@ def load_settings(
     environment: str | None = None,
     config_path: str | Path | None = None,
 ) -> AppSettings:
-    load_dotenv(PROJECT_DIR / ".env")
-    env_name = environment or _env("PAYMENT_TEST_ENV", "test")
+    load_dotenv(PROJECT_DIR / ".env")  #读取.env文件，写入环境变量，类似与import os os.getenv("PAYMENT_TEST_ENV")  # "dev" os.getenv("DB_HOST")           # "127.0.0.1"
+    env_name = environment or _env("PAYMENT_TEST_ENV", "test")  #这里的PAYMENT_TEST_ENV就是从上面获取的，如果获取不到，就默认
     path = Path(config_path) if config_path else Path(__file__).with_name("config.yaml")
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     config = raw.get(env_name, {})
@@ -181,6 +183,8 @@ def load_settings(
         payment=PaymentSettings(
             base_url=_env("PAYMENT_BASE_URL", payment.get("base_url", "")).rstrip("/"),
             timeout=float(_env("REQUEST_TIMEOUT", payment.get("timeout", 15))),
+            disburse_service=str(payment.get("disburse_service", "")).strip(),
+            query_service=str(payment.get("query_service", "")).strip(),
         ),
         merchant=MerchantSettings(
             merchant_id=_env("MCH_ID"),

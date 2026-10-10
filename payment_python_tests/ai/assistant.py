@@ -25,8 +25,6 @@ def generate_contract_draft(
     amount_field = "amount" if "amount" in fields else "tradeAmount"
     return {
         "channel": channel,
-        "service": "",
-        "query_service": "",
         "identity": identity,
         "amount": {"field": amount_field, "unit": "REVIEW_REQUIRED"},
         "status": {

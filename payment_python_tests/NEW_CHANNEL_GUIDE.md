@@ -13,7 +13,7 @@
 python -m payment_python_tests draft payment_python_tests/ai_samples/newpay.json --channel newpay --output payment_python_tests/contracts/newpay.yaml --ai
 ```
 
-必须人工确认 `service`、`query_service`、订单字段、通道订单字段、金额单位、状态映射、签名算法、回调路由，以及 `outbound_request` 中每个请求参数的来源和转换。所有 `REVIEW_REQUIRED` 清零后才能进入自动回归。
+商户侧下单和查询 service 是全局固定协议，不放在通道契约中。新增通道时必须人工确认订单字段、通道订单字段、金额单位、状态映射、签名算法、回调路由，以及 `outbound_request` 中每个请求参数的来源和转换。所有 `REVIEW_REQUIRED` 清零后才能进入自动回归。
 
 ## 3. 配置可控边界
 

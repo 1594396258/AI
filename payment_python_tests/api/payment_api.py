@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from typing import Any, Protocol
 
 import requests
-
+from loguru import logger
 from payment_python_tests.api.base_api import BaseApi
 from payment_python_tests.config.settings import AppSettings
 from payment_python_tests.utils.redact_utils import redact
@@ -29,13 +30,17 @@ class PaymentApi(BaseApi):
         return f"{prefix}{int(time.time() * 1000)}{uuid.uuid4().hex[:6]}"
 
     def build_merchant_packet(self, service: str, **fields: Any) -> dict[str, Any]:
-        self.settings.require_live_payment()
-        request_data = {
-            "msgId": fields.pop("msgId", self.new_message_id()),
-            "mchId": self.settings.merchant.merchant_id,
-            "service": service,
-            **fields,
-        }
+        self.settings.require_live_payment()  #TODO  具体作用是什么
+        request_data = dict(
+            sorted(
+                {
+                    "msgId": fields.pop("msgId", self.new_message_id()),
+                    "mchId": self.settings.merchant.merchant_id,
+                    "service": service,
+                    **fields,
+                }.items()
+            )
+        )
         signature = rsa_sha256_sign(
             compact_json(request_data), self.settings.merchant.private_key
         )
@@ -54,20 +59,29 @@ class PaymentApi(BaseApi):
                 redact({"path": path, "request": packet["request"]}),
                 evidence_order,
             )
+        logger.info(f"商户代付请求信息:\n {json.dumps(packet)}")
         response = self.post(path, json=packet)
         response.raise_for_status()
-        result = response.json()
+        try:
+            result = response.json()
+            logger.info(f"出入金响应信息：\n{result}")
+        except json.decoder.JSONDecodeError:
+            logger.error(f"出入金代付响应解析失败")
         if self.evidence:
             self.evidence.record("java_response", redact(result), evidence_order)
         self.verify_merchant_response(result)
         return result
 
-    def create_payout(self, service: str, **fields: Any) -> dict[str, Any]:
-        return self.post_merchant("disburse", service, **fields)
-
-    def query_payout(self, service: str, original_msg_id: str) -> dict[str, Any]:
+    def create_payout(self, **fields: Any) -> dict[str, Any]:
         return self.post_merchant(
-            "disburse/query", service, originalMsgId=original_msg_id
+            "disburse", self.settings.payment.disburse_service, **fields
+        )
+
+    def query_payout(self, original_msg_id: str) -> dict[str, Any]:
+        return self.post_merchant(
+            "disburse/query",
+            self.settings.payment.query_service,
+            originalMsgId=original_msg_id,
         )
 
     def send_dynamic_callback(
@@ -104,12 +118,20 @@ class PaymentApi(BaseApi):
             return response
 
     def verify_merchant_response(self, result: dict[str, Any]) -> None:
-        public_key = self.settings.merchant.response_public_key
+        public_key = self.settings.merchant.response_public_key  #TODO 具体怎么获取的
         if not public_key:
             return
         response_data = result.get("response")
         signature = result.get("signature")
-        if not isinstance(response_data, str) or not isinstance(signature, str):
+        if not isinstance(signature, str) or response_data is None:
             raise AssertionError("Java response has no response/signature fields")
-        if not rsa_sha256_verify(response_data, signature, public_key):
+        if isinstance(response_data, str):
+            signed_text = response_data
+        else:
+            signed_text = json.dumps(
+                response_data,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        if not rsa_sha256_verify(signed_text, signature, public_key):
             raise AssertionError("Java merchant response signature verification failed")

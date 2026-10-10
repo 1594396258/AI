@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import threading
 import uuid
+from copy import deepcopy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
@@ -13,6 +14,7 @@ ResponseFactory = Callable[[dict[str, Any]], dict[str, Any]]
 
 class RecordedHandler(BaseHTTPRequestHandler):
     records: list[dict[str, Any]] = []
+    records_lock: threading.Lock
     response_factory: ResponseFactory | None = None
 
     def _read_body(self) -> Any:
@@ -33,9 +35,11 @@ class RecordedHandler(BaseHTTPRequestHandler):
             "headers": dict(self.headers),
             "body": body,
         }
-        type(self).records.append(record)
+        with type(self).records_lock:
+            type(self).records.append(record)
         factory = type(self).response_factory
         response = factory(record) if factory else {"code": "SUCCESS"}
+        response = dict(response)
         status_code = int(response.pop("__status_code__", 200))
         encoded = json.dumps(response, ensure_ascii=False).encode("utf-8")
         self.send_response(status_code)
@@ -65,21 +69,30 @@ class RecordedHandler(BaseHTTPRequestHandler):
 
 class MockHttpServer:
     def __init__(
-        self, response_factory: ResponseFactory | None = None, *, port: int = 0
+        self,
+        response_factory: ResponseFactory | None = None,
+        *,
+        host: str = "127.0.0.1",
+        advertise_host: str | None = None,
+        port: int = 0,
     ):
         self.handler = type(f"Handler{uuid.uuid4().hex}", (RecordedHandler,), {})
         self.handler.records = []
+        self.handler.records_lock = threading.Lock()
         self.handler.response_factory = response_factory
-        self.server = ThreadingHTTPServer(("127.0.0.1", port), self.handler)
+        self.host = host
+        self.advertise_host = advertise_host or host
+        self.server = ThreadingHTTPServer((host, port), self.handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
     @property
     def url(self) -> str:
-        return f"http://127.0.0.1:{self.server.server_port}"
+        return f"http://{self.advertise_host}:{self.server.server_port}"
 
     @property
     def records(self) -> list[dict[str, Any]]:
-        return self.handler.records
+        with self.handler.records_lock:
+            return deepcopy(self.handler.records)
 
     def last_record(self, method: str | None = None) -> dict[str, Any] | None:
         records = (

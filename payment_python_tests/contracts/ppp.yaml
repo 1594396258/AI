@@ -1,6 +1,4 @@
 channel: ppp
-service: pay.ppppay.disburse
-query_service: unified.disburse.query
 identity:
   local_order_field: merchantOrderId
   channel_order_field: transactionId

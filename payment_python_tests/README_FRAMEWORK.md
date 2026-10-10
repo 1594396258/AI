@@ -99,4 +99,23 @@ outbound_request:
 
 因此既能发现字段缺失，也能发现“字段存在但取错来源”，例如把 `bankCode` 错写成 `ifscCode`、金额未从分转元、平台订单号错用商户 `msgId`、Bearer Token 取错配置。PPP 查询还会校验 GET URL 是否拼接了数据库中的 `transactionId`。原始请求只在内存中作断言，落盘的出站证据会遮盖密钥、卡号等敏感字段。
 
+真实出站回归用例是 `tests/live/test_ppp_real_outbound.py`。它启动 Mock PPP、调用真实 Java 的 `pay.cbtis.disburse`、捕获 Java 实际发出的 PPP 请求，再通过 CBTIS 主单找到 `FIN_PAY_ORDER` 子单，校验请求字段来源、金额转换、路径、请求头和 HMAC 签名。
+
+运行前必须满足：
+
+1. 路由方案仅路由到 PPP 测试通道。
+2. Java 的 `pay.gateway.third.pppDisburseUrl` 指向 Python Mock，例如 `http://127.0.0.1:18080/v1/payouts/`。
+3. `.env` 中 `PPP_PAY_MERCHANT`、`PPP_PIN`、`PPP_TEST_SECRET` 与 Java 使用的 PPP 测试配置一致。
+4. Java 与 Pytest 不在同一台机器时，`PPP_MOCK_BIND_HOST=0.0.0.0`，`PPP_MOCK_ADVERTISE_HOST` 填运行 Pytest 机器的可访问 IP，并确保端口可达。
+
+只运行这条用例：
+
+```powershell
+$env:RUN_LIVE_TESTS="true"
+$env:PPP_MOCK_ENABLED="true"
+python -m pytest -vv -s -c payment_python_tests\pytest.ini payment_python_tests\tests\live\test_ppp_real_outbound.py
+```
+
+该用例会创建真实测试订单。禁止将 Java 的 PPP URL 指向生产通道后运行。
+
 完整的新通道接入步骤见 `NEW_CHANNEL_GUIDE.md`。
