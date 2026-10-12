@@ -18,10 +18,10 @@ python -m payment_python_tests draft payment_python_tests/ai_samples/newpay.json
 ## 3. 配置可控边界
 
 - Java 是真实被测系统，不能 Fake。
-- 通道 URL 指向 Python Mock。PPP 对应 Java 配置是 `pay.gateway.third.pppDisburseUrl` 和 `pppDisburseQueryUrl`，具体配置中心键名以部署环境为准。
+- 通道 URL 指向独立项目 `payment_channel_mocks`。PPP 对应 Java 配置是 `pay.gateway.third.pppDisburseUrl` 和 `pppDisburseQueryUrl`，具体配置中心键名以部署环境为准。新增通道的协议处理、路由和落库方式见该项目 `README.md`。
 - 商户 `notifyUrl` 指向 `MockMerchantServer`。
 - 测试数据库只读，禁止自动化修改或清理其他订单。
-- 每个用例使用唯一 `msgId/orderNo`，Mock 行为按订单隔离。
+- 每个用例使用唯一 `msgId/orderNo`。当前独立 Mock 每个通道一个当前场景，同通道新订单必须串行；旧订单的重试和查询按首次下单的批次关联。
 
 ## 4. 通用准入矩阵
 

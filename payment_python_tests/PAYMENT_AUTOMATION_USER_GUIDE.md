@@ -68,7 +68,7 @@ payment_python_tests/
   cache/                        Redis 客户端
   models/                       通道契约、订单模型
   utils/                        签名、轮询、脱敏工具
-  mocks/                        Mock 通道和 Mock 商户
+  mocks/                        框架自身测试用的进程内 Mock
   services/                     校验、场景、证据服务
   ai/                           AI 配置审查和失败分析
   reports/                      Markdown 报告
@@ -102,7 +102,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 ## 5. 先验证框架本身
 
 ```powershell
-python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\tests
+python -m pytest -q -c payment_python_tests\pytest.ini --confcutdir=payment_python_tests payment_python_tests\tests -m "not live"
 ```
 
 未配置真实环境时，正常结果应类似：
@@ -213,29 +213,16 @@ cache.close()
 
 所有自动化 Redis key 必须配置 `REDIS_KEY_PREFIX`，不能直接使用业务系统的公共 key。
 
-## 8. 启动 Mock PPP 和 Mock 商户
+## 8. 启动独立通道 Mock
 
-推荐在测试文件中使用固定端口 fixture：
+PPP 已拆到仓库根目录的 `payment_channel_mocks`，不再由真实出站测试 fixture 启动。本机已建立该项目的独立虚拟环境，可直接启动：
 
-```python
-import pytest
-
-from payment_python_tests.mocks import MockMerchantServer, MockPppServer
-
-
-@pytest.fixture(scope="session")
-def ppp_mock():
-    server = MockPppServer(port=18080).start()
-    yield server
-    server.close()
-
-
-@pytest.fixture(scope="session")
-def merchant_mock():
-    server = MockMerchantServer(port=19090).start()
-    yield server
-    server.close()
+```powershell
+cd "D:\PyCharm 2025.2.3\AI"
+.\payment_channel_mocks\start.ps1
 ```
+
+保持该终端运行，再从另一个终端执行自动化。首次安装、独立虚拟环境、本地演示和数据库查看步骤见 `payment_channel_mocks/README.md`，不要把 Mock 项目依赖装入原测试框架的解释器。商户通知接收器本次未拆出；进程内 `MockMerchantServer` 仍供框架自身测试使用。
 
 测试环境 Java 的 PPP 地址配置为：
 
@@ -244,7 +231,7 @@ pppDisburseUrl=http://127.0.0.1:18080/v1/payouts/
 pppDisburseQueryUrl=http://127.0.0.1:18080/v1/payouts/status/
 ```
 
-如果 Java 运行在容器、远程服务器或 Kubernetes 中，`127.0.0.1` 指向的是 Java 所在机器，不能直接访问测试人员电脑。此时需要使用测试环境可访问的 IP、域名或端口转发地址。
+如果 Java 运行在容器、远程服务器或 Kubernetes 中，`127.0.0.1` 指向的是 Java 所在机器，不能直接访问测试人员电脑。此时需要使用测试环境可访问的 IP、域名或端口转发地址；Mock 的 `.env` 设置 `MOCK_HOST=0.0.0.0` 并重启。查询地址保留末尾斜杠。
 
 商户通知地址使用：
 
@@ -256,10 +243,10 @@ PPP 的通道配置 `notifyUrl` 如果会覆盖商户请求中的 `notifyUrl`，
 
 ## 9. PPP 第一条完整用例
 
-第一条用例只验证成功主链路：
+下面第 9～13 节展示成功主链路的编写思路，需自行补充对应夹具和测试数据。已实现并接入独立 Mock 的真实出站用例是 `tests/live/test_ppp_real_outbound.py`，目前校验真实下单请求；不要把本节片段当成已经执行通过的完整 Java 回归。
 
 ```text
-Mock PPP 启动
+独立 Mock 服务启动并配置 PPP 场景
   -> Python 调用真实 Java 代付
   -> Java 请求 Mock PPP
   -> 校验 Java 发给 PPP 的参数
@@ -293,6 +280,13 @@ merchant_data = {
 ```python
 msg_id = payment_client.new_message_id("PPP")
 
+mock_admin_api.configure_ppp_scenario(
+    run_id=msg_id,
+    scenario_name="waiting-for-callback",
+    create_status="pending",
+    query_status="pending",
+)
+
 payment_client.create_payout(
     msgId=msg_id,
     **merchant_data,
@@ -305,7 +299,9 @@ payment_client.create_payout(
 from payment_python_tests.utils.wait_utils import wait_until
 
 db_order = wait_until(
-    lambda: order_repository.get_by_out_order_no(msg_id),
+    lambda: order_repository.get_route_child_by_main_msg_id(
+        settings.merchant.merchant_id, msg_id
+    ),
     lambda order: order is not None and order.state_name == "PROCESSING",
     timeout=30,
     description="PPP订单进入PROCESSING",
@@ -317,12 +313,13 @@ db_order = wait_until(
 从 Mock PPP 读取 Java 实际请求：
 
 ```python
-channel_request = wait_until(
-    lambda: ppp_mock.last_record("POST"),
-    lambda record: record is not None,
+channel_requests = wait_until(
+    lambda: mock_admin_api.ppp_payout_records(msg_id, db_order.order_no),
+    lambda records: len(records) >= 1,
     timeout=10,
     description="Java请求Mock PPP",
 )
+channel_request = channel_requests[0]
 ```
 
 执行出站契约校验：
@@ -365,12 +362,19 @@ PPP 契约当前会检查：
 PPP 查询是 GET，请求 URL 最后一段必须使用数据库中的 `TRANSACTION_ID`：
 
 ```python
-query_request = wait_until(
-    lambda: ppp_mock.last_record("GET"),
-    lambda record: record is not None,
+query_requests = wait_until(
+    lambda: [
+        record for record in mock_admin_api.records(
+            run_id=msg_id, channel="ppp", business_order_no=db_order.order_no,
+            direction="java_to_mock",
+        )
+        if record["method"] == "GET"
+    ],
+    lambda records: len(records) >= 1,
     timeout=30,
     description="Java查询Mock PPP",
 )
+query_request = query_requests[0]
 
 assert_valid_outbound_request(
     contract,
@@ -387,7 +391,7 @@ assert_valid_outbound_request(
 )
 ```
 
-注意 PPP 源码限制下单满两分钟后才查询通道。外部查询对非终态订单可能直接返回本地状态，因此查询用例需要区分“外部查询”和“内部自动查询”。
+这里需先由 Java 内部查询任务或适用的入口触发通道查询，上述代码只负责等到并读取真实请求。注意 PPP 源码限制下单满两分钟后才查询通道。外部查询对非终态订单可能直接返回本地状态，因此查询用例需要区分“外部查询”和“内部自动查询”。
 
 ## 12. 通道回调测试
 
@@ -400,28 +404,21 @@ POST /ppp/disburse/notify
 正确签名回调：
 
 ```python
-from payment_python_tests.utils.sign_utils import hmac_sha256_sorted_values
-
-callback = {
-    "status": "success",
-    "merchantOrderId": db_order.order_no,
-    "transactionId": db_order.transaction_id,
-    "amount": "100.00",
-    "utr": "AUTO-UTR-001",
-}
-callback["hash"] = hmac_sha256_sorted_values(callback, ppp_secret)
-
-response = payment_client.send_static_callback(
-    contract.callback["endpoint"],
-    db_order.order_no,
-    callback,
+result = mock_admin_api.send_ppp_callback(
+    run_id=msg_id,
+    target_url="http://Java测试地址/finance-payment-service/v1/ppp/disburse/notify",
+    business_order_no=db_order.order_no,
+    channel_order_no=db_order.transaction_id,
+    amount="100.00",
+    status="success",
+    utr="AUTO-UTR-001",
 )
 
-assert response.status_code == 200
-assert response.text == "SUCCESS"
+assert result["target_status"] == 200
+assert result["target_body"] == "SUCCESS"
 ```
 
-至少覆盖以下异常回调：
+发送回调前，在独立 Mock 的 `.env` 配置与 Java 测试通道一致的 `PPP_CALLBACK_SECRET` 并重启。错签名、缺字段等故意破坏报文的场景，仍可用测试框架的 `PaymentApi.send_static_callback` 自行构造请求。至少覆盖以下异常回调：
 
 - 错误签名。
 - 金额多一分、少一分、为空。
@@ -642,7 +639,7 @@ PATH_MISMATCH               查询 URL 或通道订单号错误
 必须在 `payment_python_tests` 目录执行并指定本目录配置：
 
 ```powershell
-python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\tests
+python -m pytest -q -c payment_python_tests\pytest.ini --confcutdir=payment_python_tests payment_python_tests\tests -m "not live"
 ```
 
 本目录使用 `--confcutdir=.`，不会加载上层项目的自动登录 fixture。
@@ -663,42 +660,48 @@ python -c "from payment_python_tests.config.contract_loader import load_contract
 只跑框架测试：
 
 ```powershell
-python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\tests -m "not live"
+python -m pytest -q -c payment_python_tests\pytest.ini --confcutdir=payment_python_tests payment_python_tests\tests -m "not live"
 ```
 
 运行真实环境测试：
 
 ```powershell
 $env:RUN_LIVE_TESTS="true"
-python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\tests -m live
+python -m pytest -q -c payment_python_tests\pytest.ini --confcutdir=payment_python_tests payment_python_tests\tests -m live
 ```
 
 运行单个用例并显示详细日志：
 
 ```powershell
-python -m pytest -vv -s -c payment_python_tests\pytest.ini payment_python_tests/tests/live/test_ppp_real_java.py
+python -m pytest -vv -s -c payment_python_tests\pytest.ini --confcutdir=payment_python_tests payment_python_tests/tests/live/test_ppp_real_java.py
 ```
 
 验证 Java 实际发给 PPP 的下单请求：
 
 ```dotenv
 PPP_MOCK_ENABLED=true
-PPP_MOCK_BIND_HOST=127.0.0.1
-PPP_MOCK_ADVERTISE_HOST=127.0.0.1
-PPP_MOCK_PORT=18080
+MOCK_BASE_URL=http://127.0.0.1:18080
+MOCK_ADMIN_TOKEN=与payment_channel_mocks配置一致
+MOCK_REQUEST_TIMEOUT=10
 PPP_JAVA_DISBURSE_URL=http://127.0.0.1:18080/v1/payouts/
 PPP_PAY_MERCHANT=与Java通道配置一致
 PPP_PIN=与Java通道配置一致
 PPP_TEST_SECRET=与Java通道配置一致
 ```
 
-同时把 Java 的 `pay.gateway.third.pppDisburseUrl` 配置为 `PPP_JAVA_DISBURSE_URL`，并确保路由方案只选择 PPP。然后运行：
+同时把 Java 的 `pay.gateway.third.pppDisburseUrl` 配置为 `PPP_JAVA_DISBURSE_URL`，并确保路由方案只选择 PPP。先在一个终端运行独立服务：
 
 ```powershell
-python -m pytest -vv -s -c payment_python_tests\pytest.ini payment_python_tests\tests\live\test_ppp_real_outbound.py
+.\payment_channel_mocks\start.ps1
 ```
 
-这条用例校验的是 Mock PPP 真正收到的 Java 请求，不是测试代码手工构造的请求。Java 在远程环境时，Mock 不能使用 `127.0.0.1`，必须填写 Java 可访问的测试机 IP。
+再在另一个终端运行：
+
+```powershell
+python -m pytest -vv -s -c payment_python_tests\pytest.ini --confcutdir=payment_python_tests payment_python_tests\tests\live\test_ppp_real_outbound.py
+```
+
+这条用例通过管理接口读取 SQLite 中保存的真实 Java 请求，不是测试代码手工构造的请求。Java 在远程环境时，Java 的通道 URL 不能使用 `127.0.0.1`，必须填写 Java 可访问的 Mock 测试机 IP。
 
 真实用例执行完成后及时关闭：
 

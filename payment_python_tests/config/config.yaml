@@ -17,3 +17,6 @@ test:
     base_url: https://api.openai.com/v1
   runtime:
     run_live_tests: false
+  mock_service:
+    base_url: http://127.0.0.1:18080
+    timeout: 10

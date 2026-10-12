@@ -70,6 +70,13 @@ class RuntimeSettings:
 
 
 @dataclass(frozen=True)
+class MockServiceSettings:
+    base_url: str
+    admin_token: str
+    timeout: float
+
+
+@dataclass(frozen=True)
 class AppSettings:
     payment: PaymentSettings
     merchant: MerchantSettings
@@ -77,6 +84,7 @@ class AppSettings:
     redis: RedisSettings
     ai: AiSettings
     runtime: RuntimeSettings
+    mock_service: MockServiceSettings
 
     @classmethod
     def from_env(
@@ -179,6 +187,7 @@ def load_settings(
     redis = config.get("redis", {})
     ai = config.get("ai", {})
     runtime = config.get("runtime", {})
+    mock_service = config.get("mock_service", {})
     return AppSettings(
         payment=PaymentSettings(
             base_url=_env("PAYMENT_BASE_URL", payment.get("base_url", "")).rstrip("/"),
@@ -219,5 +228,14 @@ def load_settings(
             run_live_tests=_as_bool(
                 _env("RUN_LIVE_TESTS", runtime.get("run_live_tests", False))
             )
+        ),
+        mock_service=MockServiceSettings(
+            base_url=_env(
+                "MOCK_BASE_URL", mock_service.get("base_url", "http://127.0.0.1:18080")
+            ).rstrip("/"),
+            admin_token=_env("MOCK_ADMIN_TOKEN"),
+            timeout=float(
+                _env("MOCK_REQUEST_TIMEOUT", mock_service.get("timeout", 10))
+            ),
         ),
     )

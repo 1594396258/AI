@@ -1,0 +1,251 @@
+Metadata-Version: 2.4
+Name: payment-channel-mocks
+Version: 1.0.0
+Summary: Standalone payment channel mock service for Java integration tests
+Requires-Python: <3.13,>=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi==0.143.0
+Requires-Dist: uvicorn==0.54.0
+Requires-Dist: pydantic==2.14.1
+Requires-Dist: python-dotenv==1.2.4
+Requires-Dist: requests==2.34.2
+Requires-Dist: pytest==8.4.2
+Requires-Dist: httpx==0.28.1
+
+# 支付通道独立 Mock：PPP 示例
+
+项目位置：`D:\PyCharm 2025.2.3\AI\payment_channel_mocks`。
+
+这是一个可以单独安装、启动和部署的 Python 服务，已经实现 PPP 下单、查询、发送回调，以及请求和响应落库。后续约 10 条通道复用同一个服务，按通道增加协议处理文件即可。
+
+`payment_python_tests` 保留测试用例和断言，通过 HTTP 管理接口调用本项目。本项目不导入原测试框架，也不连接 Java 的业务数据库。
+
+## 1. 你现在可以先这样操作
+
+本次已经在该目录建立独立 `.venv`，安装依赖，并建立供本机演示使用的 `.env`。管理 Token 为 `local-demo-admin`；PPP 回调密钥留空，真实联调时填写。原测试框架的真实 `.env` 没有被修改。
+
+打开第一个 PyCharm Terminal：
+
+```powershell
+cd "D:\PyCharm 2025.2.3\AI"
+.\payment_channel_mocks\start.ps1
+```
+
+保持运行。打开第二个 Terminal：
+
+```powershell
+cd "D:\PyCharm 2025.2.3\AI"
+.\payment_channel_mocks\.venv\Scripts\python.exe -X utf8 -m payment_channel_mocks.demo
+```
+
+演示会完成：配置本次场景 → 下单返回 pending → 查询返回 success → 读取 SQLite 中的两条请求/响应记录 → 执行断言。每次使用唯一的批次号和订单号，记录保留方便查看。
+
+这个演示只演示 Mock 的能力，没有调用 Java、真实通道、MySQL 或 AI。真实 Java 出站回归的接入见第 7 节。
+
+如果 PowerShell 阻止执行脚本，直接运行相同的 Python 入口即可：
+
+```powershell
+.\payment_channel_mocks\.venv\Scripts\python.exe -X utf8 -m payment_channel_mocks
+```
+
+按 Ctrl+C 停止服务。它独立运行，不会随 pytest 结束而关闭。
+
+## 2. 换一台电脑时安装
+
+本项目统一使用 Python 3.12，当前虚拟环境为 Python 3.12.10。换电脑时先确认 `python --version` 为 3.12.x，再创建本项目的独立虚拟环境：
+
+```powershell
+cd "D:\PyCharm 2025.2.3\AI"
+python --version
+python -m venv payment_channel_mocks\.venv
+.\payment_channel_mocks\.venv\Scripts\python.exe -m pip install -e .\payment_channel_mocks
+if (-not (Test-Path payment_channel_mocks\.env)) {
+    Copy-Item payment_channel_mocks\.env.example payment_channel_mocks\.env
+}
+.\payment_channel_mocks\start.ps1
+```
+
+无需把 FastAPI、Pydantic 2 等依赖安装到原测试框架的解释器。PyCharm 单独打开这个项目时，将解释器选为本目录 `.venv\Scripts\python.exe`。
+
+可将 `payment_channel_mocks` 目录整体复制到其他位置；在新位置创建虚拟环境，并执行该项目目录下的 `python -m pip install -e .`。导入不依赖 AI 仓库或测试框架。
+
+## 3. 分层和建议阅读顺序
+
+```text
+payment_channel_mocks/
+├── app/
+│   ├── api/
+│   │   ├── ppp_api.py          接收 Java 的 PPP HTTP 请求、保存交互
+│   │   └── admin_api.py        配场景、读记录、发送模拟回调
+│   ├── channels/
+│   │   └── ppp.py              PPP 下单和查询响应的字段、状态
+│   ├── core/
+│   │   ├── config.py           读取本项目 .env
+│   │   ├── storage.py          SQLite 表和增删查操作
+│   │   ├── http_client.py      GET/POST/PUT/DELETE 外发请求封装
+│   │   └── signing.py          PPP 回调签名工具
+│   └── main.py                组装服务和注册路由
+├── tests/test_ppp_service.py   Mock 自身的稳定性测试
+├── demo.py                    可以直接运行的本地演示
+├── data/mock.db               运行后生成的 SQLite 数据库
+├── .env.example               配置模板
+├── pyproject.toml             独立项目安装配置
+└── start.ps1                  启动入口
+```
+
+建议先看 `demo.py`，理解“先配置、再请求、最后读记录”；再看 `app/channels/ppp.py`，理解通道差异；然后看 `app/api/admin_api.py` 和 `app/core/storage.py`，理解场景控制和落库。
+
+## 4. 在页面上查看请求和响应
+
+启动后访问 [Swagger 页面](http://127.0.0.1:18080/docs)。
+
+1. 展开 `GET /__admin/records`，点击 Try it out。
+2. 在 `run_id` 填入演示打印的批次号。
+3. 在 `x-mock-admin-token` 填入 `.env` 中的管理 Token。
+4. 点击 Execute，查看 `items` 中的两条交互。
+
+每条记录都有 `request_id`，可以通过 `GET /__admin/records/{request_id}` 查看单条。字段 `body` 是收到的请求体，`response_body` 是 Mock 返回的响应体。
+
+也可以在 PyCharm Database 或 SQLite 工具中打开本项目的 `data/mock.db`，执行只读 SQL：
+
+```sql
+SELECT run_id, business_order_no, method, path,
+       request_body_json, response_status, response_body_json, attempt_no
+FROM mock_exchange_record
+WHERE run_id = '替换成演示打印的批次号'
+ORDER BY id;
+```
+
+SQLite 是 Mock 自己的记录库，与 Java 的 MySQL 业务订单库分开。测试通过管理 API 获取记录，后面换成 MySQL 时，可以主要修改 `storage.py`，保持管理 API 和测试用例不变。
+
+## 5. 已实现的接口
+
+| 接口 | 用途 |
+|---|---|
+| POST /v1/payouts/ | Java 调用 PPP 下单 |
+| GET /v1/payouts/status/{transaction_id} | Java 调用 PPP 查询 |
+| GET /__admin/health | 检查服务和数据库可用 |
+| POST /__admin/scenarios | 设置 PPP 下单/查询场景 |
+| GET /__admin/scenarios/ppp | 读取当前场景；传 run_id 可读历史场景 |
+| GET /__admin/records | 按批次、通道、订单、方向查询记录 |
+| GET /__admin/records/{request_id} | 单条交互详情 |
+| POST /__admin/callbacks/ppp | 带 PPP 签名向指定 Java 地址发送回调 |
+| DELETE /__admin/records?run_id=... | 只清理指定批次的交互记录 |
+
+`/__admin/*` 使用 `X-Mock-Admin-Token`。Java 调用 PPP 接口仍发送它自己的 `Authorization: Bearer ...`，两种 Token 用途不同。
+
+激活场景的请求：
+
+```json
+{
+  "run_id": "PPP-unique-run-id",
+  "channel": "ppp",
+  "scenario_name": "waiting-for-callback",
+  "create_status": "pending",
+  "query_status": "pending",
+  "amount": null,
+  "transaction_id": null,
+  "response_status_code": 200,
+  "delay_ms": 0
+}
+```
+
+`amount=null` 使用下单请求金额；`transaction_id=null` 生成 `ppp-{merchantOrderId}`。可以改状态、金额、HTTP 状态码或延迟，用于制造测试场景。同一 run_id 再配置时会更新场景，例如将 query_status 改为 success。
+
+模拟回调的管理请求：
+
+```json
+{
+  "run_id": "PPP-unique-run-id",
+  "target_url": "http://Java测试地址/finance-payment-service/v1/ppp/disburse/notify",
+  "business_order_no": "Java平台子订单号",
+  "channel_order_no": "PPP通道订单号",
+  "amount": "100.00",
+  "status": "success",
+  "utr": "AUTO-MOCK-UTR"
+}
+```
+
+`target_url` 要填测试环境实际可访问的完整地址。本项目使用 `PPP_CALLBACK_SECRET` 生成签名。目标返回的 HTTP 状态和正文会落库；目标超时等网络异常记为 599，管理接口返回 502，方便失败排查。HTTP 599 是本项目内部标记，不是 Java 实际返回的状态。
+
+管理接口返回 200 仅代表“完成回调调用和记录”；仍需断言 `target_status`、`target_body`，并在原测试框架中验证 Java 本地订单状态和商户通知。
+
+## 6. 记录怎么关联
+
+| 标识 | 含义 |
+|---|---|
+| run_id | 一次自动化执行的唯一批次；真实用例使用商户 msgId |
+| business_order_no | PPP 请求里的 merchantOrderId，对应 Java 平台子订单号 |
+| channel_order_no | PPP 返回的 transactionId |
+| request_id | 一次 HTTP 交互的唯一标识 |
+| attempt_no | 同批次、通道、方向、方法、路径、订单的第几次交互 |
+
+`direction=java_to_mock` 表示下单或查询，`direction=mock_to_java` 表示模拟通道回调。
+
+`mock_exchange_record` 保存请求 URL、方法、路径、查询参数、请求头、请求体，以及响应状态、响应头、响应体、订单号、场景名、耗时和语义请求哈希。`active_scenario` 保存当前激活场景，`scenario_history` 保存各批次场景。
+
+记录在返回响应前写入，重启服务后保留；重复请求逐条记录。JSON 以解析后的内容存储，不保证保留原始空格和字段顺序；超大正文只保存“超过限制”的标记。request_hash 是 method/path/query/body 的规范化摘要，不含请求头。
+
+为精确校验字段、Bearer Token 和签名，Mock 记录库保存测试原值。`.env`、虚拟环境和数据库均已被 Git 忽略。原测试框架导出报告或 AI 证据时继续使用脱敏工具，不直接把这个原始库交给 AI。
+
+## 7. 接到原来的真实 Java 回归
+
+1. 先启动本项目。Java 在远程机器时，将本项目 `.env` 中 `MOCK_HOST` 改为 `0.0.0.0`，重启；确认 Java 能访问测试机的 18080 端口。
+2. 人工把 Java 测试环境的路由方案指向 PPP，再将通道地址改为：
+   - `pay.gateway.third.pppDisburseUrl=http://测试机IP:18080/v1/payouts/`
+   - `pppDisburseQueryUrl=http://测试机IP:18080/v1/payouts/status/`
+   查询地址必须保留末尾斜杠，Java 会直接拼接 transactionId。
+3. 在原 `payment_python_tests/.env` 补齐：
+
+```dotenv
+RUN_LIVE_TESTS=true
+PPP_MOCK_ENABLED=true
+MOCK_BASE_URL=http://127.0.0.1:18080
+MOCK_ADMIN_TOKEN=local-demo-admin
+MOCK_REQUEST_TIMEOUT=10
+PPP_JAVA_DISBURSE_URL=http://测试机IP:18080/v1/payouts/
+PPP_PAY_MERCHANT=与Java测试通道配置一致
+PPP_PIN=与Java测试通道配置一致
+PPP_TEST_SECRET=与Java测试通道配置一致
+```
+
+`MOCK_BASE_URL` 是测试脚本访问 Mock 的管理地址；`PPP_JAVA_DISBURSE_URL` 是人工核对 Java 通道配置的声明值，填写它不会自动修改 Java。其他现有商户、数据库配置继续使用原测试框架的配置。
+
+发送真实模拟回调时，还要在新项目 `.env` 填 `PPP_CALLBACK_SECRET`，与 Java 的测试 PPP SecretKey 一致。两个进程分别读自己的配置，原测试框架不再配置 Mock 的监听 IP、监听端口和记录库路径。
+
+在另一个终端，使用原测试框架的 Python 解释器执行：
+
+```powershell
+cd "D:\PyCharm 2025.2.3\AI"
+python -m pytest -vv -s -c payment_python_tests\pytest.ini --confcutdir=payment_python_tests payment_python_tests\tests\live\test_ppp_real_outbound.py
+```
+
+该用例会通过 `MockAdminApi(BaseApi)` 配场景 → 调用真实 Java 下单 → 从 Java 业务数据库关联平台子订单 → 按 run_id 和订单号读 Mock 记录 → 校验真实出站字段、金额、Token 和 HMAC。
+
+查询、回调、商户通知等其他场景可以复用同一管理客户端；本次接通的是已有的真实下单出站用例。商户通知接收器没有在这次一起拆出；旧进程内 Mock 仅供框架自身测试保留。
+
+## 8. 下一条通道怎么加
+
+不需要创建第二个服务或复制数据库代码：
+
+1. 在 `app/channels/` 新建通道文件，参考 PPP 实现字段和状态差异。
+2. 在 `app/api/` 新建路由文件，定义该通道真实使用的下单、查询路径。
+3. 在 `app/main.py` 注册路由；复用 `ExchangeStore` 和 `HttpClient`。
+4. 扩展 `admin_api.py` 的通道支持和场景配置，并实现该通道回调签名。
+5. 在 `tests/` 增加协议和落库测试，在原测试框架的 `contracts/` 增加断言契约。
+
+当前对同一通道的新订单，使用“每通道一个当前场景”，因此同通道测试用例要串行执行，不使用 pytest -n，也不要由两个人同时切换同一通道的场景。已接收过的订单，后续查询和重试仍绑定原批次场景；但这不能解决两个新批次同时下单时的场景冲突。
+
+目前是单进程、小规模测试服务，不引入 Redis、消息队列或多进程部署。需要并发新订单时，再增加按订单匹配场景。删除记录会同时删除该批次订单与场景的关联证据，待异步查询和重试结束后再清理。
+
+## 9. 验证项目自身
+
+```powershell
+cd "D:\PyCharm 2025.2.3\AI"
+.\payment_channel_mocks\.venv\Scripts\python.exe -m pytest -q -c payment_channel_mocks\pytest.ini --confcutdir=payment_channel_mocks payment_channel_mocks\tests
+```
+
+覆盖：下单/查询记录、管理 Token、精确回调签名、回调 HTTP 错误与超时记录、重启持久化、跨批次查询和重试隔离、同批次状态更新、并发重试编号、非法 JSON/超大正文、未知通道单号和按批次清理。
+
+`--confcutdir` 用于隔离 AI 仓库根目录其他项目的自动登录 fixture。Mock 自身测试不会调用真实 Java，也不会查询业务数据库。
+

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "payment-channel-mocks"
+version = "1.0.0"
+description = "Standalone payment channel mock service for Java integration tests"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dynamic = ["dependencies"]
+
+[project.scripts]
+payment-channel-mocks = "payment_channel_mocks.__main__:main"
+
+[tool.setuptools]
+packages = [
+    "payment_channel_mocks",
+    "payment_channel_mocks.app",
+    "payment_channel_mocks.app.api",
+    "payment_channel_mocks.app.channels",
+    "payment_channel_mocks.app.core",
+]
+package-dir = {payment_channel_mocks = "."}
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}

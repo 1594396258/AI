@@ -11,7 +11,7 @@ database/                  MySQL 客户端和订单 Repository
 cache/                     Redis 客户端
 models/                    通道和订单数据模型
 utils/                     签名、轮询、脱敏
-mocks/                     PPP 和商户 Mock
+mocks/                     仅供框架单元测试的进程内 Mock
 services/                  校验、场景、证据
 ai/                        AI 配置草稿和失败分析
 reports/                   Markdown 报告
@@ -24,7 +24,7 @@ tests/                     单元、契约和真实环境测试
 ```powershell
 cd "D:\PyCharm 2025.2.3\AI"
 pip install -r payment_python_tests\requirements.txt
-python -m pytest -q -c payment_python_tests\pytest.ini payment_python_tests\tests\test_framework_contract.py
+python -m pytest -q -c payment_python_tests\pytest.ini --confcutdir=payment_python_tests payment_python_tests\tests\test_framework_contract.py
 ```
 
 这些测试不需要 Java、MQ 或数据库，验证框架的配置解析、字段校验、Mock 服务和证据分析。
@@ -97,23 +97,25 @@ outbound_request:
       validator: hmac_sha256_sorted_values
 ```
 
-因此既能发现字段缺失，也能发现“字段存在但取错来源”，例如把 `bankCode` 错写成 `ifscCode`、金额未从分转元、平台订单号错用商户 `msgId`、Bearer Token 取错配置。PPP 查询还会校验 GET URL 是否拼接了数据库中的 `transactionId`。原始请求只在内存中作断言，落盘的出站证据会遮盖密钥、卡号等敏感字段。
+因此既能发现字段缺失，也能发现“字段存在但取错来源”，例如把 `bankCode` 错写成 `ifscCode`、金额未从分转元、平台订单号错用商户 `msgId`、Bearer Token 取错配置。PPP 查询还会校验 GET URL 是否拼接了数据库中的 `transactionId`。独立 Mock 的 SQLite 记录库保存测试请求原值供精确断言；测试框架导出的证据会遮盖密钥、卡号等敏感字段，AI 分析使用脱敏证据。
 
-真实出站回归用例是 `tests/live/test_ppp_real_outbound.py`。它启动 Mock PPP、调用真实 Java 的 `pay.cbtis.disburse`、捕获 Java 实际发出的 PPP 请求，再通过 CBTIS 主单找到 `FIN_PAY_ORDER` 子单，校验请求字段来源、金额转换、路径、请求头和 HMAC 签名。
+真实出站回归用例是 `tests/live/test_ppp_real_outbound.py`。它连接独立运行的 `payment_channel_mocks`、配置本次测试场景、调用真实 Java 的 `pay.cbtis.disburse`，再从 Mock 的 SQLite 记录中获取 Java 实际发出的 PPP 请求。随后通过 CBTIS 主单找到 `FIN_PAY_ORDER` 子单，校验请求字段来源、金额转换、路径、请求头和 HMAC 签名。
 
 运行前必须满足：
 
 1. 路由方案仅路由到 PPP 测试通道。
-2. Java 的 `pay.gateway.third.pppDisburseUrl` 指向 Python Mock，例如 `http://127.0.0.1:18080/v1/payouts/`。
+2. 先运行 `.\payment_channel_mocks\start.ps1`，Java 的 `pay.gateway.third.pppDisburseUrl` 指向该服务。启动、独立虚拟环境和本地演示见 `../payment_channel_mocks/README.md`。默认只监听本机；远程 Java 联调时在 Mock 的 `.env` 设置 `MOCK_HOST=0.0.0.0`，使用测试机 IP。
 3. `.env` 中 `PPP_PAY_MERCHANT`、`PPP_PIN`、`PPP_TEST_SECRET` 与 Java 使用的 PPP 测试配置一致。
-4. Java 与 Pytest 不在同一台机器时，`PPP_MOCK_BIND_HOST=0.0.0.0`，`PPP_MOCK_ADVERTISE_HOST` 填运行 Pytest 机器的可访问 IP，并确保端口可达。
+4. `.env` 中的 `MOCK_BASE_URL` 是 Pytest 访问 Mock 管理接口的地址；Java 与 Mock 不在同一台机器时，Java 的通道地址必须使用 Mock 机器可访问的内网 IP，并确保端口可达。
 
 只运行这条用例：
 
 ```powershell
 $env:RUN_LIVE_TESTS="true"
 $env:PPP_MOCK_ENABLED="true"
-python -m pytest -vv -s -c payment_python_tests\pytest.ini payment_python_tests\tests\live\test_ppp_real_outbound.py
+.\payment_channel_mocks\start.ps1
+# 另开一个终端执行：
+python -m pytest -vv -s -c payment_python_tests\pytest.ini --confcutdir=payment_python_tests payment_python_tests\tests\live\test_ppp_real_outbound.py
 ```
 
 该用例会创建真实测试订单。禁止将 Java 的 PPP URL 指向生产通道后运行。

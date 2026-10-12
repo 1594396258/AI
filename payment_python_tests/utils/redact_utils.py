@@ -7,6 +7,8 @@ SENSITIVE_FIELDS = {
     "authorization",
     "cookie",
     "set-cookie",
+    "x-mock-admin-token",
+    "mock_admin_token",
     "hash",
     "signature",
     "pin",

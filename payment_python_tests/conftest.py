@@ -4,6 +4,7 @@ import pytest
 from dotenv import load_dotenv
 
 from payment_python_tests.api.payment_api import PaymentApi
+from payment_python_tests.api.mock_admin_api import MockAdminApi
 from payment_python_tests.config.contract_loader import load_contract
 from payment_python_tests.config.settings import AppSettings
 from payment_python_tests.services.evidence_service import EvidenceStore
@@ -33,6 +34,17 @@ def evidence_store(tmp_path):
 @pytest.fixture
 def payment_api(app_settings, evidence_store):
     client = PaymentApi(app_settings, evidence_store)
+    yield client
+    client.close()
+
+
+@pytest.fixture
+def mock_admin_api(app_settings):
+    client = MockAdminApi(
+        app_settings.mock_service.base_url,
+        app_settings.mock_service.timeout,
+        admin_token=app_settings.mock_service.admin_token,
+    )
     yield client
     client.close()
 

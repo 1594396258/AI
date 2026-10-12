@@ -23,11 +23,13 @@ tests
 | `cache/` | Redis 连接和缓存操作 | `RedisClient` |
 | `models/` | 无外部副作用的数据模型 | `ChannelContract`, `OrderSnapshot` |
 | `utils/` | 无业务状态的公共工具 | 签名、轮询、脱敏 |
-| `mocks/` | 外部通道和商户模拟 | `MockPppServer`, `MockMerchantServer` |
+| `mocks/` | 仅供框架单元测试使用的进程内轻量 Mock | `MockPppServer`, `MockMerchantServer` |
 | `services/` | 组合多个基础层完成业务测试 | 校验、场景、证据 |
 | `ai/` | 配置草稿和失败分析 | `AiAssistant` |
 | `reports/` | 报告构建 | Markdown 报告 |
 | `tests/` | 测试场景和断言 | 单元、契约、真实环境测试 |
+
+真实 Java 出站回归使用仓库根目录下独立运行的 `payment_channel_mocks`，测试框架通过 `MockAdminApi` 配置场景和读取请求证据，不直接读取 Mock 进程内存。字段与业务结果断言仍属于测试框架，不能写进 Mock 服务。
 
 ## 新代码导包规范
 

@@ -1,0 +1,2 @@
+[console_scripts]
+payment-channel-mocks = payment_channel_mocks.__main__:main
