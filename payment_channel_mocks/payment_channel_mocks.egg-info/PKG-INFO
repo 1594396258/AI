@@ -24,6 +24,15 @@ Requires-Dist: httpx==0.28.1
 
 本次已经在该目录建立独立 `.venv`，安装依赖，并建立供本机演示使用的 `.env`。管理 Token 为 `local-demo-admin`；PPP 回调密钥留空，真实联调时填写。原测试框架的真实 `.env` 没有被修改。
 
+首次启动前，在本项目 `payment_channel_mocks/.env` 中填写下面两项。本机演示可以自行指定测试值，例如：
+
+```dotenv
+PPP_PIN=demo-pin
+PPP_REQUEST_SECRET=local-demo-secret
+```
+
+这两项现在是必填配置；已有 `.env` 也需要补齐。真实 Java 联调时改为 Java PPP 通道配置中的 pin 和 SecretKey，修改后重启 Mock。`PPP_CALLBACK_SECRET` 只用于发送回调，不能替代下单验签密钥。
+
 打开第一个 PyCharm Terminal：
 
 ```powershell
@@ -62,8 +71,9 @@ python -m venv payment_channel_mocks\.venv
 if (-not (Test-Path payment_channel_mocks\.env)) {
     Copy-Item payment_channel_mocks\.env.example payment_channel_mocks\.env
 }
-.\payment_channel_mocks\start.ps1
 ```
+
+复制配置模板后，按第 1 节填写 `.env` 中的 `PPP_PIN` 和 `PPP_REQUEST_SECRET`，再运行 `.\payment_channel_mocks\start.ps1`。
 
 无需把 FastAPI、Pydantic 2 等依赖安装到原测试框架的解释器。PyCharm 单独打开这个项目时，将解释器选为本目录 `.venv\Scripts\python.exe`。
 
@@ -83,7 +93,7 @@ payment_channel_mocks/
 │   │   ├── config.py           读取本项目 .env
 │   │   ├── storage.py          SQLite 表和增删查操作
 │   │   ├── http_client.py      GET/POST/PUT/DELETE 外发请求封装
-│   │   └── signing.py          PPP 回调签名工具
+│   │   └── signing.py          PPP 请求验签和回调签名工具
 │   └── main.py                组装服务和注册路由
 ├── tests/test_ppp_service.py   Mock 自身的稳定性测试
 ├── demo.py                    可以直接运行的本地演示
@@ -122,8 +132,8 @@ SQLite 是 Mock 自己的记录库，与 Java 的 MySQL 业务订单库分开。
 
 | 接口 | 用途 |
 |---|---|
-| POST /v1/payouts/ | Java 调用 PPP 下单 |
-| GET /v1/payouts/status/{transaction_id} | Java 调用 PPP 查询 |
+| POST /ppp/v1/payouts/ | Java 调用 PPP 下单 |
+| GET /ppp/v1/payouts/status/{transaction_id} | Java 调用 PPP 查询 |
 | GET /__admin/health | 检查服务和数据库可用 |
 | POST /__admin/scenarios | 设置 PPP 下单/查询场景 |
 | GET /__admin/scenarios/ppp | 读取当前场景；传 run_id 可读历史场景 |
@@ -133,6 +143,16 @@ SQLite 是 Mock 自己的记录库，与 Java 的 MySQL 业务订单库分开。
 | DELETE /__admin/records?run_id=... | 只清理指定批次的交互记录 |
 
 `/__admin/*` 使用 `X-Mock-Admin-Token`。Java 调用 PPP 接口仍发送它自己的 `Authorization: Bearer ...`，两种 Token 用途不同。
+
+PPP 接口会实际校验收到的请求，不再只是保存 Token 和签名：
+
+- 下单 `POST /ppp/v1/payouts/`（以及不带末尾斜杠的路径）：`Authorization: Bearer <PPP_PIN>` 必须匹配，请求 JSON 必须有有效的 `hash`。
+- 查询 `GET /ppp/v1/payouts/status/{transaction_id}`：只校验 Bearer Token；PPP 查询协议没有请求体签名，不要求 `hash`，也不要求配置下单密钥。
+- 下单签名算法：除去 `hash`，其余字段按键升序排列，将值用 `|` 拼接，null 视为空字符串且保留分隔位置；以 `PPP_REQUEST_SECRET` 做 HMAC-SHA256，结果为 64 位小写十六进制字符串。JSON 字段顺序不影响签名；所有字段都参与计算。
+
+缺少或错误的 Token 返回 HTTP 401 / `INVALID_AUTHORIZATION`；缺少、格式错误或不匹配的 `hash` 返回 HTTP 401 / `INVALID_SIGNATURE`。缺少服务端必需配置则返回 HTTP 503 / `MOCK_AUTH_NOT_CONFIGURED`，不会跳过验证。非法 JSON、非对象正文和超大正文仍优先返回原来的 400/413。
+
+被拒绝的请求及错误响应也会落库，响应头中的 `X-Mock-Request-Id` 可用于查记录；拒绝的下单不会建立通道订单，也不会覆盖已接受订单的批次关联。可通过 `app/core/signing.py` 的 `hmac_sha256_sorted_values()` 生成本地请求签名，`demo.py` 已按该方式签名并发送配置的 Token。
 
 激活场景的请求：
 
@@ -192,8 +212,8 @@ SQLite 是 Mock 自己的记录库，与 Java 的 MySQL 业务订单库分开。
 
 1. 先启动本项目。Java 在远程机器时，将本项目 `.env` 中 `MOCK_HOST` 改为 `0.0.0.0`，重启；确认 Java 能访问测试机的 18080 端口。
 2. 人工把 Java 测试环境的路由方案指向 PPP，再将通道地址改为：
-   - `pay.gateway.third.pppDisburseUrl=http://测试机IP:18080/v1/payouts/`
-   - `pppDisburseQueryUrl=http://测试机IP:18080/v1/payouts/status/`
+   - `pay.gateway.third.pppDisburseUrl=http://测试机IP:18080/ppp/v1/payouts/`
+   - `pppDisburseQueryUrl=http://测试机IP:18080/ppp/v1/payouts/status/`
    查询地址必须保留末尾斜杠，Java 会直接拼接 transactionId。
 3. 在原 `payment_python_tests/.env` 补齐：
 
@@ -203,15 +223,14 @@ PPP_MOCK_ENABLED=true
 MOCK_BASE_URL=http://127.0.0.1:18080
 MOCK_ADMIN_TOKEN=local-demo-admin
 MOCK_REQUEST_TIMEOUT=10
-PPP_JAVA_DISBURSE_URL=http://测试机IP:18080/v1/payouts/
 PPP_PAY_MERCHANT=与Java测试通道配置一致
 PPP_PIN=与Java测试通道配置一致
 PPP_TEST_SECRET=与Java测试通道配置一致
 ```
 
-`MOCK_BASE_URL` 是测试脚本访问 Mock 的管理地址；`PPP_JAVA_DISBURSE_URL` 是人工核对 Java 通道配置的声明值，填写它不会自动修改 Java。其他现有商户、数据库配置继续使用原测试框架的配置。
+`MOCK_BASE_URL` 是测试脚本访问 Mock 的管理地址。Java 实际使用的下单和查询地址只在 Java 配置中心维护，测试框架的 `.env` 不再重复保存一份无效副本。其他现有商户、数据库配置继续使用原测试框架的配置。
 
-发送真实模拟回调时，还要在新项目 `.env` 填 `PPP_CALLBACK_SECRET`，与 Java 的测试 PPP SecretKey 一致。两个进程分别读自己的配置，原测试框架不再配置 Mock 的监听 IP、监听端口和记录库路径。
+在独立 Mock 的 `payment_channel_mocks/.env` 中也必须填写 `PPP_PIN` 和 `PPP_REQUEST_SECRET`，分别与 Java 测试 PPP 通道的 pin、SecretKey 一致；`PPP_REQUEST_SECRET` 对应原测试框架中的 `PPP_TEST_SECRET`。发送真实模拟回调时，再填写 `PPP_CALLBACK_SECRET`，与 Java 回调验签使用的测试 PPP SecretKey 一致。入站请求密钥和回调密钥分别配置，是否使用同一个值由 Java 通道配置决定。两个进程分别读自己的配置，原测试框架不再配置 Mock 的监听 IP、监听端口和记录库路径。
 
 在另一个终端，使用原测试框架的 Python 解释器执行：
 
@@ -245,7 +264,7 @@ cd "D:\PyCharm 2025.2.3\AI"
 .\payment_channel_mocks\.venv\Scripts\python.exe -m pytest -q -c payment_channel_mocks\pytest.ini --confcutdir=payment_channel_mocks payment_channel_mocks\tests
 ```
 
-覆盖：下单/查询记录、管理 Token、精确回调签名、回调 HTTP 错误与超时记录、重启持久化、跨批次查询和重试隔离、同批次状态更新、并发重试编号、非法 JSON/超大正文、未知通道单号和按批次清理。
+覆盖：下单/查询记录、下单 HMAC 验签、请求篡改/错误密钥/非法签名、下单和查询 Bearer 鉴权、缺少配置拒绝请求、查询无需 hash、拒绝请求不污染订单关联、独立配置读取、管理 Token、精确回调签名、回调 HTTP 错误与超时记录、重启持久化、跨批次查询和重试隔离、同批次状态更新、并发重试编号、非法 JSON/超大正文、未知通道单号和按批次清理。
 
 `--confcutdir` 用于隔离 AI 仓库根目录其他项目的自动登录 fixture。Mock 自身测试不会调用真实 Java，也不会查询业务数据库。
 

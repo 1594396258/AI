@@ -37,4 +37,6 @@ payment_channel_mocks.egg-info/dependency_links.txt
 payment_channel_mocks.egg-info/entry_points.txt
 payment_channel_mocks.egg-info/requires.txt
 payment_channel_mocks.egg-info/top_level.txt
+tests/test_config.py
 tests/test_ppp_service.py
+tests/test_signing.py

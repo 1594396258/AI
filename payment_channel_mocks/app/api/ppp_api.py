@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 import time
 import uuid
 from typing import Any
@@ -11,12 +12,44 @@ from starlette.concurrency import run_in_threadpool
 
 from payment_channel_mocks.app.channels.ppp import PppChannel
 from payment_channel_mocks.app.core.config import MockSettings
+from payment_channel_mocks.app.core.signing import verify_hmac_sha256_sorted_values
 from payment_channel_mocks.app.core.storage import ExchangeStore, utc_now
 
 
 def build_ppp_router(store: ExchangeStore, settings: MockSettings) -> APIRouter:
     router = APIRouter(tags=["PPP channel"])
     ppp = PppChannel(store)
+
+    def authentication_error(
+        request: Request, body: dict[str, Any] | None = None
+    ) -> tuple[int, dict[str, str]] | None:
+        # GET uses Bearer only; POST additionally requires the payout signing key.
+        if not settings.ppp_pin:
+            return 503, {
+                "code": "MOCK_AUTH_NOT_CONFIGURED",
+                "message": "PPP_PIN is required",
+            }
+        if body is not None and not settings.ppp_request_secret:
+            return 503, {
+                "code": "MOCK_AUTH_NOT_CONFIGURED",
+                "message": "PPP_REQUEST_SECRET is required",
+            }
+        scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+        if scheme.lower() != "bearer" or not secrets.compare_digest(
+            token.encode("utf-8"), settings.ppp_pin.encode("utf-8")
+        ):
+            return 401, {
+                "code": "INVALID_AUTHORIZATION",
+                "message": "Missing or invalid PPP Bearer token",
+            }
+        if body is not None and not verify_hmac_sha256_sorted_values(
+            body, settings.ppp_request_secret
+        ):
+            return 401, {
+                "code": "INVALID_SIGNATURE",
+                "message": "Missing or invalid PPP hash",
+            }
+        return None
 
     async def read_body(request: Request) -> tuple[Any, int, str | None]:
         raw = bytearray()
@@ -76,8 +109,8 @@ def build_ppp_router(store: ExchangeStore, settings: MockSettings) -> APIRouter:
         )
         return response
 
-    @router.post("/v1/payouts/")
-    @router.post("/v1/payouts", include_in_schema=False)
+    @router.post("/ppp/v1/payouts/")
+    @router.post("/ppp/v1/payouts", include_in_schema=False)
     async def payout(request: Request) -> JSONResponse:
         started_at, started_counter = utc_now(), time.perf_counter()
         request_id = uuid.uuid4().hex
@@ -101,13 +134,17 @@ def build_ppp_router(store: ExchangeStore, settings: MockSettings) -> APIRouter:
                 scenario = await run_in_threadpool(
                     store.get_scenario, "ppp", original_payout["run_id"]
                 )
-            result = await run_in_threadpool(ppp.payout, body, scenario["config"])
+            failure = authentication_error(request, body)
+            if failure:
+                result = (*failure, order_no, "")
+            else:
+                result = await run_in_threadpool(ppp.payout, body, scenario["config"])
         return await run_in_threadpool(
             record_response, request, request_id, scenario, body, *result,
             started_at, started_counter,
         )
 
-    @router.get("/v1/payouts/status/{transaction_id}")
+    @router.get("/ppp/v1/payouts/status/{transaction_id}")
     def query(transaction_id: str, request: Request) -> JSONResponse:
         started_at, started_counter = utc_now(), time.perf_counter()
         request_id = uuid.uuid4().hex
@@ -116,7 +153,12 @@ def build_ppp_router(store: ExchangeStore, settings: MockSettings) -> APIRouter:
         if original_payout:
             # Earlier orders keep their scenario even after a new run starts.
             scenario = store.get_scenario("ppp", original_payout["run_id"])
-        result = ppp.query(transaction_id, scenario["config"])
+        failure = authentication_error(request)
+        if failure:
+            order_no = original_payout["business_order_no"] if original_payout else ""
+            result = (*failure, order_no, transaction_id)
+        else:
+            result = ppp.query(transaction_id, scenario["config"])
         return record_response(
             request, request_id, scenario, {}, *result, started_at, started_counter
         )

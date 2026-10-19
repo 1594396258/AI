@@ -23,7 +23,7 @@ tests
 | `cache/` | Redis 连接和缓存操作 | `RedisClient` |
 | `models/` | 无外部副作用的数据模型 | `ChannelContract`, `OrderSnapshot` |
 | `utils/` | 无业务状态的公共工具 | 签名、轮询、脱敏 |
-| `mocks/` | 仅供框架单元测试使用的进程内轻量 Mock | `MockPppServer`, `MockMerchantServer` |
+| `mocks/` | 仅供框架单元测试使用的商户通知接收器 | `MockMerchantServer` |
 | `services/` | 组合多个基础层完成业务测试 | 校验、场景、证据 |
 | `ai/` | 配置草稿和失败分析 | `AiAssistant` |
 | `reports/` | 报告构建 | Markdown 报告 |

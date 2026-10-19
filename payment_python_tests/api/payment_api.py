@@ -30,7 +30,7 @@ class PaymentApi(BaseApi):
         return f"{prefix}{int(time.time() * 1000)}{uuid.uuid4().hex[:6]}"
 
     def build_merchant_packet(self, service: str, **fields: Any) -> dict[str, Any]:
-        self.settings.require_live_payment()  #TODO  具体作用是什么
+        self.settings.require_live_payment()  #校验是否有MCH_PRIVATE_KEY、MCH_ID
         request_data = dict(
             sorted(
                 {
@@ -40,7 +40,7 @@ class PaymentApi(BaseApi):
                     **fields,
                 }.items()
             )
-        )
+        )  # 排序和转为字典，方便后续进行签名
         signature = rsa_sha256_sign(
             compact_json(request_data), self.settings.merchant.private_key
         )
@@ -64,7 +64,7 @@ class PaymentApi(BaseApi):
         response.raise_for_status()
         try:
             result = response.json()
-            logger.info(f"出入金响应信息：\n{result}")
+            logger.info(f"出入金响应信息：\n{json.dumps(result)}")
         except json.decoder.JSONDecodeError:
             logger.error(f"出入金代付响应解析失败")
         if self.evidence:
@@ -118,7 +118,7 @@ class PaymentApi(BaseApi):
             return response
 
     def verify_merchant_response(self, result: dict[str, Any]) -> None:
-        public_key = self.settings.merchant.response_public_key  #TODO 具体怎么获取的
+        public_key = self.settings.merchant.response_public_key
         if not public_key:
             return
         response_data = result.get("response")

@@ -68,7 +68,7 @@ payment_python_tests/
   cache/                        Redis 客户端
   models/                       通道契约、订单模型
   utils/                        签名、轮询、脱敏工具
-  mocks/                        框架自身测试用的进程内 Mock
+  mocks/                        框架自身测试用的商户通知接收器
   services/                     校验、场景、证据服务
   ai/                           AI 配置审查和失败分析
   reports/                      Markdown 报告
@@ -227,8 +227,8 @@ cd "D:\PyCharm 2025.2.3\AI"
 测试环境 Java 的 PPP 地址配置为：
 
 ```text
-pppDisburseUrl=http://127.0.0.1:18080/v1/payouts/
-pppDisburseQueryUrl=http://127.0.0.1:18080/v1/payouts/status/
+pppDisburseUrl=http://127.0.0.1:18080/ppp/v1/payouts/
+pppDisburseQueryUrl=http://127.0.0.1:18080/ppp/v1/payouts/status/
 ```
 
 如果 Java 运行在容器、远程服务器或 Kubernetes 中，`127.0.0.1` 指向的是 Java 所在机器，不能直接访问测试人员电脑。此时需要使用测试环境可访问的 IP、域名或端口转发地址；Mock 的 `.env` 设置 `MOCK_HOST=0.0.0.0` 并重启。查询地址保留末尾斜杠。
@@ -401,21 +401,30 @@ PPP 使用静态回调：
 POST /ppp/disburse/notify
 ```
 
-正确签名回调：
+正常回调必须使用本次用例创建后从数据库读取的订单信息，不能把平台订单号和通道订单号写成固定 `.env` 值：
 
 ```python
+from decimal import Decimal
+
 result = mock_admin_api.send_ppp_callback(
     run_id=msg_id,
     target_url="http://Java测试地址/finance-payment-service/v1/ppp/disburse/notify",
     business_order_no=db_order.order_no,
     channel_order_no=db_order.transaction_id,
-    amount="100.00",
+    amount=f"{Decimal(str(db_order.channel_amount)) / Decimal('100'):.2f}",
     status="success",
     utr="AUTO-UTR-001",
 )
 
 assert result["target_status"] == 200
 assert result["target_body"] == "SUCCESS"
+
+final_order = wait_until(
+    lambda: order_repository.get(db_order.order_no),
+    lambda order: order is not None and order.state_name == "SUCCESS",
+    timeout=30,
+    description="PPP回调后本地订单进入SUCCESS",
+)
 ```
 
 发送回调前，在独立 Mock 的 `.env` 配置与 Java 测试通道一致的 `PPP_CALLBACK_SECRET` 并重启。错签名、缺字段等故意破坏报文的场景，仍可用测试框架的 `PaymentApi.send_static_callback` 自行构造请求。至少覆盖以下异常回调：
@@ -683,13 +692,12 @@ PPP_MOCK_ENABLED=true
 MOCK_BASE_URL=http://127.0.0.1:18080
 MOCK_ADMIN_TOKEN=与payment_channel_mocks配置一致
 MOCK_REQUEST_TIMEOUT=10
-PPP_JAVA_DISBURSE_URL=http://127.0.0.1:18080/v1/payouts/
 PPP_PAY_MERCHANT=与Java通道配置一致
 PPP_PIN=与Java通道配置一致
 PPP_TEST_SECRET=与Java通道配置一致
 ```
 
-同时把 Java 的 `pay.gateway.third.pppDisburseUrl` 配置为 `PPP_JAVA_DISBURSE_URL`，并确保路由方案只选择 PPP。先在一个终端运行独立服务：
+同时在 Java 配置中心把 `pay.gateway.third.pppDisburseUrl` 和 `pppDisburseQueryUrl` 指向独立 Mock，并确保路由方案只选择 PPP。`.env` 不再重复保存 Java 的通道 URL，因为该值不会自动修改或证明 Java 配置已生效。先在一个终端运行独立服务：
 
 ```powershell
 .\payment_channel_mocks\start.ps1

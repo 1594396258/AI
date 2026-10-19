@@ -11,7 +11,7 @@ database/                  MySQL 客户端和订单 Repository
 cache/                     Redis 客户端
 models/                    通道和订单数据模型
 utils/                     签名、轮询、脱敏
-mocks/                     仅供框架单元测试的进程内 Mock
+mocks/                     仅供框架单元测试的商户通知接收器
 services/                  校验、场景、证据
 ai/                        AI 配置草稿和失败分析
 reports/                   Markdown 报告
@@ -75,7 +75,7 @@ PPP 的已确认常量和特殊回调入口：
 
 PPP 与多数通道不同：PPP Dashboard 静态配置 webhook，通过 `merchantOrderId` 定位平台订单，不走 `notifyv2/{service}@{orderNo}`。框架同时支持 `send_static_callback` 和通用 `send_callback`，由通道 YAML 的 `callback.route_mode` 决定。
 
-`tests/live/test_ppp_real_java.py` 是真实 Java 的安全起步样例，默认跳过。它只对指定的测试处理中订单发送“金额错误但签名正确”的 PPP 回调，验证 Java 返回 HTTP 400。运行前必须填写专用测试订单和测试密钥，不能指向生产环境。
+`tests/live/test_ppp_real_java.py` 是真实 Java 的回调样例，默认跳过，包含两类用例：正常回调用本次测试自己创建的订单，并从 `FIN_PAY_ORDER` 读取 `ORDER_NO`、`TRANSACTION_ID` 和 `CHANNEL_AMOUNT` 后发送成功回调，再验证订单进入 `SUCCESS`；异常金额回调才使用 `.env` 中预先填写的 `EXISTING_PROCESSING_ORDER_NO` 和 `EXISTING_CHANNEL_ORDER_NO`，验证 Java 返回 HTTP 400。`PPP_CALLBACK_TARGET_URL` 可显式指定 Java 回调地址，不填写时从 `PAYMENT_BASE_URL` 推导。回调签名密钥只配置在独立 Mock 的 `.env` 中：`PPP_CALLBACK_SECRET`，不能指向生产环境。
 
 新通道通常只需要新增一个 YAML 和一个极薄的适配器；公共校验、状态机安全、幂等、通知、证据和 AI 分析都复用。
 

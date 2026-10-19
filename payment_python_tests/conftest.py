@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -50,13 +51,33 @@ def mock_admin_api(app_settings):
 
 
 @pytest.fixture
-def live_required(app_settings):
+def live_enabled(app_settings):
     if not app_settings.runtime.run_live_tests:
         pytest.skip(
             "RUN_LIVE_TESTS 当前解析为 false；请在 payment_python_tests/.env "
             "中配置 RUN_LIVE_TESTS=true（行尾注释前需要空格）"
         )
 
+
+@pytest.fixture
+def ppp_capture_api(live_enabled, app_settings, mock_admin_api):
+    """Return the HTTP client for the separately running PPP request capture."""
+    if os.getenv("PPP_MOCK_ENABLED", "false").strip().lower() != "true":
+        pytest.skip("设置 PPP_MOCK_ENABLED=true 后才会校验 Java 的真实 PPP 请求")
+
+    try:
+        mock_admin_api.health()
+    except Exception as exc:
+        pytest.fail(
+            f"无法连接独立 Mock 服务 {app_settings.mock_service.base_url}：{exc}；"
+            r"请先运行 .\payment_channel_mocks\start.ps1"
+        )
+
+    return mock_admin_api
+
+
+@pytest.fixture
+def live_required(live_enabled, app_settings):
     missing = []
     if not app_settings.payment.base_url:
         missing.append("PAYMENT_BASE_URL")

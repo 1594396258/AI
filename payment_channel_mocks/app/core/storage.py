@@ -302,6 +302,8 @@ class ExchangeStore:
                 SELECT * FROM mock_exchange_record
                 WHERE channel = ? AND channel_order_no = ?
                   AND direction = 'java_to_mock' AND method = 'POST'
+                  AND response_status >= 200 AND response_status < 300
+                  AND channel_order_no <> ''
                 ORDER BY id DESC LIMIT 1
                 """,
                 (channel, channel_order_no),
@@ -325,6 +327,8 @@ class ExchangeStore:
                 SELECT * FROM mock_exchange_record
                 WHERE channel = ? AND business_order_no = ?
                   AND direction = 'java_to_mock' AND method = 'POST'
+                  AND response_status >= 200 AND response_status < 300
+                  AND channel_order_no <> ''
                 ORDER BY id DESC LIMIT 1
                 """,
                 (channel, business_order_no),

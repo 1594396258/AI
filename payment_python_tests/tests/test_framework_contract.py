@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from payment_python_tests.config.contract_loader import load_contract
-from payment_python_tests.mocks import MockMerchantServer, MockPppServer
+from payment_python_tests.mocks import MockMerchantServer
 from payment_python_tests.ai.assistant import analyze_failure, generate_contract_draft
 from payment_python_tests.reports.report_builder import build_markdown_report
 from payment_python_tests.services.evidence_service import EvidenceStore
@@ -26,15 +26,12 @@ def test_ppp_contract_and_common_validation():
     assert {issue.code for issue in issues} == {"ORDER_MISMATCH", "AMOUNT_MISMATCH", "CHANNEL_ORDER_MISMATCH"}
 
 
-def test_mock_servers_are_order_scoped():
-    ppp = MockPppServer().start()
+def test_merchant_mock_can_start():
     merchant = MockMerchantServer().start()
     try:
-        ppp.configure("o-1", query_status="success")
-        assert ppp.url.startswith("http://127.0.0.1:")
+        assert merchant.url.startswith("http://127.0.0.1:")
         assert merchant.records == []
     finally:
-        ppp.close()
         merchant.close()
 
 
@@ -86,7 +83,7 @@ def test_ppp_outbound_request_values_match_sources_and_signature():
         "transactionModeKey": "imps",
     }
     body["hash"] = hmac_sha256_sorted_values(body, "test-secret")
-    record = {"method": "POST", "path": "/v1/payouts/", "headers": {"Authorization": "Bearer test-pin", "Content-Type": "application/json"}, "body": body}
+    record = {"method": "POST", "path": "/ppp/v1/payouts/", "headers": {"Authorization": "Bearer test-pin", "Content-Type": "application/json"}, "body": body}
 
     assert not validate_outbound_request(contract, record, context, signing_secret="test-secret")
 
@@ -112,9 +109,9 @@ def test_ai_failure_analysis_mentions_missing_outbound_evidence():
 def test_ppp_query_outbound_path_uses_saved_transaction_id():
     contract = load_contract(ROOT / "contracts" / "ppp.yaml")
     context = {"database": {"transactionId": "txn-001"}, "channel_config": {"pin": "test-pin"}}
-    record = {"method": "GET", "path": "/v1/payouts/status/txn-001", "body": {}, "headers": {"Authorization": "Bearer test-pin", "Content-Type": "application/json"}}
+    record = {"method": "GET", "path": "/ppp/v1/payouts/status/txn-001", "body": {}, "headers": {"Authorization": "Bearer test-pin", "Content-Type": "application/json"}}
     assert not validate_outbound_request(contract, record, context, operation="query")
-    record["path"] = "/v1/payouts/status/other-order"
+    record["path"] = "/ppp/v1/payouts/status/other-order"
     assert any(issue.code == "PATH_MISMATCH" for issue in validate_outbound_request(contract, record, context, operation="query"))
 
 

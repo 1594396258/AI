@@ -19,7 +19,7 @@ signature:
   delimiter: "|"
 outbound_request:
   method: POST
-  path_prefix: /v1/payouts/
+  path_prefix: /ppp/v1/payouts/
   body:
     amount:
       source: merchant.inrQuantity
@@ -59,7 +59,7 @@ outbound_request:
     - remark
 outbound_query:
   method: GET
-  path_prefix: /v1/payouts/status/
+  path_prefix: /ppp/v1/payouts/status/
   path_suffix_source: database.transactionId
   headers:
     Authorization:

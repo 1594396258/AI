@@ -59,7 +59,7 @@ def build_admin_router(store: ExchangeStore, settings: MockSettings) -> APIRoute
 
     @router.post("/scenarios")
     def configure(payload: ScenarioRequest) -> dict[str, Any]:
-        data = payload.model_dump()
+        data = payload.model_dump()  #转字典
         if data["channel"] != "ppp":
             raise HTTPException(status_code=400, detail="Only ppp is implemented")
         config = {

@@ -19,6 +19,8 @@ class MockSettings:
     callback_timeout: float
     ppp_callback_secret: str
     max_body_bytes: int
+    ppp_request_secret: str = ""
+    ppp_pin: str = ""
 
     @classmethod
     def from_env(cls) -> "MockSettings":
@@ -35,5 +37,7 @@ class MockSettings:
             callback_timeout=float(os.getenv("MOCK_CALLBACK_TIMEOUT", "10")),
             ppp_callback_secret=os.getenv("PPP_CALLBACK_SECRET", "").strip(),
             max_body_bytes=int(os.getenv("MOCK_MAX_BODY_BYTES", "1048576")),
+            ppp_request_secret=os.getenv("PPP_REQUEST_SECRET", "").strip(),
+            ppp_pin=os.getenv("PPP_PIN", "").strip(),
         )
 
