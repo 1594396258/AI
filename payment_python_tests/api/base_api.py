@@ -45,7 +45,7 @@ class BaseApi:
             "json": kwargs.get("json"),
             "headers": kwargs.get("headers"),
         }
-        logger.info("HTTP request: %s", redact(log_data))
+        logger.info("HTTP request: %s", redact(log_data))  # redact 脱敏
         response = self.session.request(method=method.upper(), url=url, timeout=timeout, **kwargs)
         try:
             response_log: Any = redact(response.json())
