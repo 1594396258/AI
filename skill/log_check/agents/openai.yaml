@@ -1,0 +1,7 @@
+interface:
+  display_name: "WFT Prod Log Check"
+  short_description: "生产日志检索与接口运行状态检查"
+  default_prompt: "Use $wft-prod-log-check to search production logs and summarize API health for a bounded time window."
+
+policy:
+  allow_implicit_invocation: true

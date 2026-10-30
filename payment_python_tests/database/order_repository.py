@@ -11,7 +11,7 @@ class OrderRepository:
         FROM FIN_PAY_ORDER
     """
 
-    def __init__(self, client: MysqlClient):
+    def __init__(self, client: MysqlClient): #client:MysqlClient类型注解“请调用者把已经创建好的 MysqlClient 传给我。这种把外部对象传进来的方式叫做依赖注入。”
         self.client = client
 
     def get(self, order_no: str) -> OrderSnapshot | None:

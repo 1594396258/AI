@@ -56,7 +56,7 @@ class PaymentApi(BaseApi):
         if self.evidence:
             self.evidence.record(
                 "merchant_request",
-                redact({"path": path, "request": packet["request"]}),
+                redact({"path": path, "request": packet["request"]}),  # 脱敏入库
                 evidence_order,
             )
         logger.info(f"商户代付请求信息:\n {json.dumps(packet)}")

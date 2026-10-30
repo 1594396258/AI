@@ -1581,5 +1581,153 @@
   {
     "role": "assistant",
     "content": "根据我的使用习惯：\n\n**`list_files`**：当我不知道项目目录结构，需要先看看有哪些文件时用，比如你说\"帮我看下项目结构\"。\n\n**`search_code`**：当我需要找某个关键词在哪个文件里，但不知道具体文件路径时用，比如你说\"帮我找下登录相关的代码\"。\n\n**`read_file`**：当我已经知道文件路径，直接读取内容时用，比如你说\"看下 redis_config.py\"。\n\n一般流程是：`list_files` → `search_code` → `read_file`，从粗到细。"
+  },
+  {
+    "role": "user",
+    "content": "在吗"
+  },
+  {
+    "role": "assistant",
+    "content": "在，说吧。"
+  },
+  {
+    "role": "user",
+    "content": "在吗"
+  },
+  {
+    "role": "assistant",
+    "content": " ",
+    "tool_calls": [
+      {
+        "id": "call_77afc7a2b70e446daef89113e3233b4c",
+        "function": {
+          "arguments": "{\"limit\":20}",
+          "name": "list_files"
+        },
+        "type": "function"
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_77afc7a2b70e446daef89113e3233b4c",
+    "content": "{\"root\": \"D:\\\\PyCharm 2025.2.3\\\\AI\", \"files\": [\".claude/.mcp.json\", \".claude/settings.local.json\", \"1.py\", \"AI_model/__init__.py\", \"AI_model/config.py\", \"AI_model/openAI.py\", \"AI_model/workspace_tools.py\", \"api_auto/__init__.py\", \"api_auto/api/__init__.py\", \"api_auto/api/base_api.py\", \"api_auto/api/login_api.py\", \"api_auto/config/__init__.py\", \"api_auto/config/config.yaml\", \"api_auto/config/redis_config.py\", \"api_auto/data/__init__.py\", \"api_auto/data/test_posts.yaml\", \"api_auto/tests/__init__.py\", \"api_auto/tests/test_posts.py\", \"api_auto/utils/__init__.py\", \"api_auto/utils/ai_assistant.py\"], \"truncated\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "在，你说。"
+  },
+  {
+    "role": "user",
+    "content": "在吗"
+  },
+  {
+    "role": "assistant",
+    "content": " ",
+    "tool_calls": [
+      {
+        "id": "call_f21585a66c9049a89a4e5109319588e5",
+        "function": {
+          "arguments": "{\"limit\":5}",
+          "name": "list_files"
+        },
+        "type": "function"
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_f21585a66c9049a89a4e5109319588e5",
+    "content": "{\"root\": \"D:\\\\PyCharm 2025.2.3\\\\AI\", \"files\": [\".claude/.mcp.json\", \".claude/settings.local.json\", \"1.py\", \"AI_model/__init__.py\", \"AI_model/config.py\"], \"truncated\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": " 在的。🙂"
+  },
+  {
+    "role": "user",
+    "content": "你在干嘛"
+  },
+  {
+    "role": "assistant",
+    "content": " ",
+    "tool_calls": [
+      {
+        "id": "call_9f518711bd144f679a911a3dda1cbb81",
+        "function": {
+          "arguments": "{\"limit\":5}",
+          "name": "list_files"
+        },
+        "type": "function"
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_9f518711bd144f679a911a3dda1cbb81",
+    "content": "{\"root\": \"D:\\\\PyCharm 2025.2.3\\\\AI\", \"files\": [\".claude/.mcp.json\", \".claude/settings.local.json\", \"1.py\", \"AI_model/__init__.py\", \"AI_model/config.py\"], \"truncated\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": " 刚才误用了文件列表工具，其实你只是问我在不在。我现在没有在做其他事，在这里等你提问。抱歉。"
+  },
+  {
+    "role": "user",
+    "content": "好的"
+  },
+  {
+    "role": "assistant",
+    "content": " ",
+    "tool_calls": [
+      {
+        "id": "call_de0192f5f0094bbca45ab96f91b9f4a4",
+        "function": {
+          "arguments": "{\"limit\":1}",
+          "name": "list_files"
+        },
+        "type": "function"
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_de0192f5f0094bbca45ab96f91b9f4a4",
+    "content": "{\"root\": \"D:\\\\PyCharm 2025.2.3\\\\AI\", \"files\": [\".claude/.mcp.json\"], \"truncated\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": " 好。有什么问题或想继续做的，直接告诉我。"
+  },
+  {
+    "role": "user",
+    "content": "有skill码"
+  },
+  {
+    "role": "assistant",
+    "content": "没有，我不会用 skill 码之类的东西。\n\n你有什么问题继续问就行，或者我们继续写接口测试用例？"
+  },
+  {
+    "role": "user",
+    "content": "怎么几没有"
+  },
+  {
+    "role": "assistant",
+    "content": "哈哈，我就是一个 AI 助手，没有 skill 码这种东西。\n\n你有什么问题说吧，我们继续框架的事。"
+  },
+  {
+    "role": "user",
+    "content": "我写的skill呢"
+  },
+  {
+    "role": "assistant",
+    "content": "你说的 skill 是什么意思？我没理解。\n\n是指：\n- 你写的某个功能代码？\n- 还是其他什么东西？\n\n说清楚一点，我帮你看。"
+  },
+  {
+    "role": "user",
+    "content": "就是你的技能啊"
+  },
+  {
+    "role": "assistant",
+    "content": "哦，你说的是我的能力。\n\n根据我们这次对话，我能帮你做的有：\n\n**代码相关**\n- 读取你本地项目代码\n- 检查代码问题\n- 帮你写代码\n\n**你现在的项目**\n- API 自动化框架搭建\n- 测试用例设计\n- Mock Server 搭建\n- SQL 分析\n\n**其他**\n- 技术问题解答\n- 面试题解析\n- 概念讲解，比如我们之前聊的 RAG、向量数据库\n\n---\n\n你想继续做什么？我们的框架还差：\n1. 针对你们系统写真实接口用例\n2. Mock Server 搭建\n3. CI 接入"
   }
 ]

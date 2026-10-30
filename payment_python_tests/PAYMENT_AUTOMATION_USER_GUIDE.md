@@ -583,6 +583,16 @@ python -m payment_python_tests analyze payment_python_tests/artifacts/evidence.j
 python -m payment_python_tests analyze payment_python_tests/artifacts/evidence.json --ai
 ```
 
+也可以在 pytest 失败时生成 AI 分析并附加到 Allure。先在 `.env` 配置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`，再显式添加 `--ai-analysis`：
+
+```powershell
+pytest ./payment_python_tests/tests/live/test_ppp_real_java.py -v `
+  --alluredir=./report/allure_data --ai-analysis
+allure serve ./report/allure_data
+```
+
+只有失败用例会调用 AI。此集成只发送用例名、用例描述和失败摘要，不发送完整请求响应或 stdout/stderr；AI 调用失败不会改变 pytest 的原始结果。Allure 报告中打开失败用例，在附件里查看“AI 失败分析”。
+
 生成 Markdown 报告：
 
 ```powershell

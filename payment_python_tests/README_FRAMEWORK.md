@@ -47,7 +47,7 @@ python -m payment_python_tests draft payment_python_tests/ai_samples/ppp_samples
 python -m payment_python_tests analyze payment_python_tests/artifacts/evidence.json
 ```
 
-本地规则会先判断是否缺少回调、数据库或商户通知证据；企业批准的模型网关可以在 `ai_assistant.py` 的 `ask_llm` 中接入，用于对完整证据做自然语言归因。
+本地规则会先判断是否缺少回调、数据库或商户通知证据。配置 AI 后，可以用 `--ai` 分析导出的证据 JSON；也可以在 pytest 命令中显式加 `--ai-analysis`，失败时将脱敏后的用例名、用例描述和失败摘要发送给模型，并把结果附加到 Allure。
 
 配置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 后，可显式增加 `--ai`：
 
@@ -55,9 +55,10 @@ python -m payment_python_tests analyze payment_python_tests/artifacts/evidence.j
 python -m payment_python_tests draft payment_python_tests/ai_samples/ppp_samples.json --channel ppp --output payment_python_tests/contracts/ppp.generated.yaml --ai
 python -m payment_python_tests analyze payment_python_tests/artifacts/evidence.json --ai
 python -m payment_python_tests report payment_python_tests/artifacts/evidence.json --output payment_python_tests/reports/ppp-report.md
+pytest -c payment_python_tests/pytest.ini payment_python_tests/tests/live/test_ppp_real_java.py -v --alluredir=./report/allure_data --ai-analysis
 ```
 
-模型不会在 pytest 中自动调用，避免网络波动、费用和非确定性影响回归结果。送入模型前仍要对账号、姓名、卡号、手机号、密钥和生产数据脱敏。
+不加 `--ai-analysis` 时 pytest 不会调用模型，避免网络波动、费用和非确定性影响回归结果。pytest 集成只发送用例名、用例描述和失败摘要，不发送完整 stdout/stderr 或请求响应；AI 分析失败不会改变原测试的通过/失败结果。
 
 ## 接入真实 Java
 

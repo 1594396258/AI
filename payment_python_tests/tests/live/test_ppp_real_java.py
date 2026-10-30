@@ -23,7 +23,7 @@ def _real_ppp_merchant_fields() -> dict[str, str]:
         "bankAccount": "Test User",
         "bankName": "STATE BANK OF INDIA",
         "mobileNumber": "9770038888",
-        "currency": "INR",
+        "currency": "USD",
         "notifyUrl": os.getenv("NOTIFY_URL", ""),
     }
 

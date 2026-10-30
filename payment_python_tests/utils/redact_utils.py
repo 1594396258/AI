@@ -14,13 +14,13 @@ SENSITIVE_FIELDS = {
     "pin",
     "secretkey",
     "password",
-    "bankcardno",
-    "customeraccno",
-    "customermobile",
-    "customername",
-    "customeremail",
-    "bankaccount",
-    "mobilenumber",
+    # "bankcardno",
+    # "customeraccno",
+    # "customermobile",
+    # "customername",
+    # "customeremail",
+    # "bankaccount",
+    # "mobilenumber",
 }
 
 

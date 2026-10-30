@@ -1,0 +1,7 @@
+interface:
+  display_name: "TAPD Testcase"
+  short_description: "从TAPD需求生成字段级测试用例Excel"
+  default_prompt: "Use $tapd-testcase to generate field-level Excel test cases from a TAPD story URL."
+
+policy:
+  allow_implicit_invocation: true
