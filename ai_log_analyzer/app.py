@@ -11,8 +11,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field
 
-from ai_client import AIConfig, analyze_with_ai
-from analyzer import analyze_log
+try:
+    # 从工作区根目录启动：uvicorn ai_log_analyzer.app:app
+    from .ai_client import AIConfig, analyze_with_ai
+    from .analyzer import analyze_log
+except ImportError:
+    # 进入本目录启动：uvicorn app:app
+    from ai_client import AIConfig, analyze_with_ai
+    from analyzer import analyze_log
 
 
 BASE_DIR = Path(__file__).resolve().parent

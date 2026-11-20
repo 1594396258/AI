@@ -6,7 +6,24 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
+
+
+BASE_DIR = Path(__file__).resolve().parent
+ENV_FILE = BASE_DIR / ".env"
+
+
+def load_env_file(path: str | Path = ENV_FILE) -> bool:
+    """读取项目配置；已有系统环境变量优先，不会被 .env 覆盖。"""
+
+    return load_dotenv(dotenv_path=path, override=False)
+
+
+# 无论从哪个工作目录启动 Uvicorn，都固定读取本项目目录中的 .env。
+load_env_file()
 
 
 @dataclass(frozen=True)
@@ -18,11 +35,16 @@ class AIConfig:
 
     @classmethod
     def from_env(cls) -> "AIConfig":
+        timeout_value = os.getenv("AI_TIMEOUT", "60")
+        try:
+            timeout = int(timeout_value)
+        except ValueError as exc:
+            raise ValueError("AI_TIMEOUT 必须是整数秒") from exc
         return cls(
             base_url=os.getenv("AI_BASE_URL", "https://api.openai.com/v1").rstrip("/"),
             api_key=os.getenv("AI_API_KEY", os.getenv("OPENAI_API_KEY", "")),
             model=os.getenv("AI_MODEL", "gpt-4.1-mini"),
-            timeout=int(os.getenv("AI_TIMEOUT", "60")),
+            timeout=timeout,
         )
 
     @property

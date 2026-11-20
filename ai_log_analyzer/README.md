@@ -23,24 +23,44 @@ python -m uvicorn app:app --host 127.0.0.1 --port 5000
 
 ## 配置 AI（可选）
 
-在 PowerShell 当前会话中设置：
+复制配置模板并编辑项目目录中的 `.env`：
 
 ```powershell
-$env:AI_API_KEY="你的密钥"
-$env:AI_BASE_URL="https://api.openai.com/v1"
-$env:AI_MODEL="gpt-4.1-mini"
+Copy-Item .env.example .env
+```
+
+`.env` 内容示例：
+
+```dotenv
+AI_API_KEY=你的密钥
+AI_BASE_URL=https://api.openai.com/v1
+AI_MODEL=gpt-4.1-mini
+AI_TIMEOUT=60
+```
+
+然后直接启动：
+
+```powershell
 python -m uvicorn app:app --host 127.0.0.1 --port 5000
 ```
+
+程序会自动读取 `ai_log_analyzer/.env`，且系统环境变量的优先级高于 `.env`。真实 `.env` 已被 `.gitignore` 排除，不要把密钥写入 `.env.example` 或提交到版本库。
 
 本地 Ollama 示例：
 
 ```powershell
-$env:AI_BASE_URL="http://127.0.0.1:11434/v1"
-$env:AI_MODEL="qwen2.5:7b"
+AI_BASE_URL=http://127.0.0.1:11434/v1
+AI_MODEL=qwen2.5:7b
+AI_TIMEOUT=60
+```
+
+配置好 `.env` 后启动：
+
+```powershell
 python -m uvicorn app:app --host 127.0.0.1 --port 5000
 ```
 
-完整配置参考 `.env.example`。应用不会自动读取 `.env`，这样可以避免无意加载工作区里的其他密钥；你可以通过系统环境变量、IDE 运行配置或自行使用 dotenv 注入。
+完整配置参考 `.env.example`。
 
 ## 测试
 
