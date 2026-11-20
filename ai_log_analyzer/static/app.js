@@ -13,6 +13,8 @@ const elements = {
   aiHint: $("#aiHint"),
   codePicker: $("#codePicker"),
   codeProject: $("#codeProject"),
+  databasePicker: $("#databasePicker"),
+  databaseSelect: $("#databaseSelect"),
   empty: $("#emptyState"),
   loading: $("#loadingState"),
   loadingText: $("#loadingText"),
@@ -101,6 +103,7 @@ function renderAI(report) {
   const card = $("#aiCard");
   const content = $("#aiContent");
   const references = $("#codeReferences");
+  const databaseReferences = $("#databaseReferences");
   if (!report.ai_analysis && !report.ai_error) {
     card.classList.add("hidden");
     return;
@@ -117,6 +120,19 @@ function renderAI(report) {
   } else {
     references.classList.add("hidden");
     references.innerHTML = "";
+  }
+  if (report.database_context) {
+    const context = report.database_context;
+    const tables = (context.tables || []).map(item => `<span>${escapeHtml(item)}</span>`).join("");
+    const queries = (context.queries || []).map(item => `<span>查询 ${escapeHtml(item.fingerprint)} · ${escapeHtml(item.rows)} 行${item.truncated ? " · 已截断" : ""}</span>`).join("");
+    const trace = (context.trace || []).map(item => `${escapeHtml(item.step)}. ${escapeHtml(item.tool)}${item.reason ? ` — ${escapeHtml(item.reason)}` : ""}`).join("<br>");
+    databaseReferences.classList.remove("hidden");
+    databaseReferences.innerHTML = `<strong>只读数据库调查：${escapeHtml(context.database.name)} · ${escapeHtml(context.database.dialect)}</strong> · ${escapeHtml(context.stats.tool_calls)} 次工具调用 · 每次最多 ${escapeHtml(context.stats.max_rows_per_query)} 行
+      <div class="code-reference-list">${tables}${queries || (tables ? "" : "未执行数据查询")}</div>
+      ${trace ? `<details class="investigation-trace"><summary>查看数据库调查轨迹</summary><div>${trace}</div></details>` : ""}`;
+  } else {
+    databaseReferences.classList.add("hidden");
+    databaseReferences.innerHTML = "";
   }
   if (report.ai_error) {
     content.innerHTML = `<div class="ai-error">AI 深度分析未完成：${escapeHtml(report.ai_error)}。本地分析结果不受影响。</div>`;
@@ -191,7 +207,8 @@ async function analyze() {
   }
   setLoading(true);
   const useCode = elements.aiToggle.checked && Boolean(elements.codeProject.value);
-  elements.loadingText.textContent = useCode ? "AI 正在多轮调查源码、调用链与配置…" : (elements.aiToggle.checked ? "本地提取完成后将请求 AI 深度分析…" : "提取异常与关键堆栈…");
+  const useDatabase = elements.aiToggle.checked && Boolean(elements.databaseSelect.value);
+  elements.loadingText.textContent = useCode || useDatabase ? "AI 正在多轮调查源码、数据库与证据链…" : (elements.aiToggle.checked ? "本地提取完成后将请求 AI 深度分析…" : "提取异常与关键堆栈…");
   try {
     const response = await fetch("/api/analyze", {
       method: "POST",
@@ -200,6 +217,7 @@ async function analyze() {
         log,
         use_ai: elements.aiToggle.checked,
         code_project_id: useCode ? elements.codeProject.value : null,
+        database_id: useDatabase ? elements.databaseSelect.value : null,
       }),
     });
     const data = await response.json().catch(() => ({ error: "服务响应格式异常" }));
@@ -226,7 +244,8 @@ function reportAsMarkdown(report) {
     ai = `\n## AI 深度分析\n\n${item.summary || ""}\n\n${item.root_cause || ""}\n`;
   }
   const code = report.code_context ? `\n## 关联代码\n\n${report.code_context.files.map(item => `- ${item.path}:${item.matched_line || item.start_line}`).join("\n")}\n` : "";
-  return `# 日志分析报告\n\n- 严重程度：${severityMeta(report.severity).label}\n- 置信度：${report.confidence}%\n- 分析方式：${report.analysis_mode}\n\n## 结论\n\n${report.summary}\n\n## 可能原因\n\n${causes}\n\n## 建议操作\n\n${actions}${ai}${code}\n## 关键日志\n\n${evidence}\n`;
+  const database = report.database_context ? `\n## 数据库调查\n\n- 数据源：${report.database_context.database.name}\n- 查询次数：${report.database_context.queries.length}\n` : "";
+  return `# 日志分析报告\n\n- 严重程度：${severityMeta(report.severity).label}\n- 置信度：${report.confidence}%\n- 分析方式：${report.analysis_mode}\n\n## 结论\n\n${report.summary}\n\n## 可能原因\n\n${causes}\n\n## 建议操作\n\n${actions}${ai}${code}${database}\n## 关键日志\n\n${evidence}\n`;
 }
 
 async function readFile(file) {
@@ -261,7 +280,9 @@ elements.clear.addEventListener("click", () => { elements.input.value = ""; upda
 elements.analyze.addEventListener("click", analyze);
 elements.aiToggle.addEventListener("change", () => {
   elements.codeProject.disabled = !elements.aiToggle.checked;
+  elements.databaseSelect.disabled = !elements.aiToggle.checked;
   if (!elements.aiToggle.checked) elements.codeProject.value = "";
+  if (!elements.aiToggle.checked) elements.databaseSelect.value = "";
 });
 
 for (const eventName of ["dragenter", "dragover"]) {
@@ -303,6 +324,13 @@ async function initialize() {
       elements.codePicker.classList.remove("hidden");
       elements.codeProject.innerHTML = '<option value="">不读取代码</option>' + projectsStatus.projects.map(project => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name)}</option>`).join("");
       elements.codeProject.disabled = !elements.aiToggle.checked;
+    }
+    const databasesResponse = await fetch("/api/databases");
+    const databasesStatus = await databasesResponse.json();
+    if (databasesStatus.enabled) {
+      elements.databasePicker.classList.remove("hidden");
+      elements.databaseSelect.innerHTML = '<option value="">不查询数据库</option>' + databasesStatus.databases.map(database => `<option value="${escapeHtml(database.id)}">${escapeHtml(database.name)} · ${escapeHtml(database.dialect)}</option>`).join("");
+      elements.databaseSelect.disabled = !elements.aiToggle.checked;
     }
   } catch (_) {
     elements.aiToggle.disabled = true;

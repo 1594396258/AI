@@ -21,6 +21,7 @@ try:
         configured_projects,
         get_project,
     )
+    from .database_tools import DatabaseToolError, configured_databases, get_database
 except ImportError:
     # 进入本目录启动：uvicorn app:app
     from ai_client import AIConfig, analyze_with_ai
@@ -31,6 +32,7 @@ except ImportError:
         configured_projects,
         get_project,
     )
+    from database_tools import DatabaseToolError, configured_databases, get_database
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -45,6 +47,7 @@ class AnalyzeRequest(BaseModel):
     log: str = Field(default="", description="需要分析的原始日志")
     use_ai: bool = Field(default=False, description="是否调用已配置的 AI 服务进行深度分析")
     code_project_id: str | None = Field(default=None, description="需要关联分析的允许代码库 ID")
+    database_id: str | None = Field(default=None, description="需要关联查询的只读数据库 ID")
 
 
 def error_response(message: str, status_code: int) -> JSONResponse:
@@ -84,6 +87,14 @@ def create_app() -> FastAPI:
             "projects": [project.public_dict() for project in projects],
         }
 
+    @application.get("/api/databases", tags=["system"])
+    async def databases() -> dict[str, object]:
+        items = configured_databases()
+        return {
+            "enabled": bool(items),
+            "databases": [item.public_dict() for item in items],
+        }
+
     @application.post("/api/analyze", tags=["analysis"])
     async def analyze(payload: AnalyzeRequest):
         if not payload.log.strip():
@@ -97,6 +108,7 @@ def create_app() -> FastAPI:
             return error_response(str(exc), 400)
 
         project = None
+        database = None
         if payload.code_project_id:
             if not payload.use_ai:
                 return error_response("关联本地代码需要同时启用 AI 深度分析", 400)
@@ -104,18 +116,30 @@ def create_app() -> FastAPI:
                 project = get_project(payload.code_project_id)
             except CodeContextError as exc:
                 return error_response(str(exc), 400)
+        if payload.database_id:
+            if not payload.use_ai:
+                return error_response("查询数据库需要同时启用 AI 深度分析", 400)
+            try:
+                database = get_database(payload.database_id)
+            except DatabaseToolError as exc:
+                return error_response(str(exc), 400)
 
         if payload.use_ai:
             try:
-                if project:
-                    ai_analysis, investigation = await run_in_threadpool(
+                if project or database:
+                    ai_analysis, investigation, database_investigation = await run_in_threadpool(
                         investigate_with_ai,
                         report["sanitized_log"],
                         report,
                         project,
+                        None,
+                        database,
                     )
                     report["ai_analysis"] = ai_analysis
-                    report["code_context"] = investigation
+                    if investigation:
+                        report["code_context"] = investigation
+                    if database_investigation:
+                        report["database_context"] = database_investigation
                     report["analysis_mode"] = "ai+investigation+local"
                 else:
                     report["ai_analysis"] = await run_in_threadpool(

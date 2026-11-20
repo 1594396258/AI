@@ -9,6 +9,7 @@
 - 输出严重程度、置信度、可能根因、证据和修复步骤
 - 调用 AI 前自动脱敏密码、Token、API Key、邮箱和 IP
 - 可选择关联本地代码库，由 AI 多轮使用只读工具调查目录、源码、调用链和配置
+- 可选择白名单只读数据库，由 AI 查看表结构并执行受限 SELECT 查询
 - 支持 OpenAI、兼容 Chat Completions 的服务及本地 Ollama
 - 一键复制 Markdown 分析报告
 
@@ -61,6 +62,31 @@ AI_CODE_MAX_ROUNDS=8
 AI_CODE_MAX_TOOL_CALLS=12
 AI_CODE_MAX_CHARS=60000
 ```
+
+## 配置只读数据库（可选）
+
+在 `.env` 中先声明允许使用的数据源别名，再配置连接信息：
+
+```dotenv
+AI_DATABASES=payin_test,order_readonly
+
+AI_DB_PAYIN_TEST_NAME=出入金测试库
+AI_DB_PAYIN_TEST_URL=mysql+pymysql://readonly_user:url_encoded_password@127.0.0.1:3306/payin_payout?charset=utf8mb4
+AI_DB_PAYIN_TEST_SCHEMAS=payin_payout
+
+AI_DB_ORDER_READONLY_NAME=订单只读库
+AI_DB_ORDER_READONLY_URL=postgresql+psycopg://readonly_user:url_encoded_password@127.0.0.1:5432/orders
+AI_DB_ORDER_READONLY_SCHEMAS=public
+
+AI_DB_MAX_TOOL_CALLS=8
+AI_DB_MAX_ROWS=50
+AI_DB_QUERY_TIMEOUT_MS=5000
+AI_DB_MAX_CHARS=40000
+```
+
+配置后重启服务，页面会出现“查询只读数据库”选择框。模型可以列出表、查看表结构和执行单条 `SELECT`/只读 CTE；后端拒绝增删改、DDL、多语句、SQL 注释和 `SELECT ... INTO`，并强制限制查询行数、返回字符、调用次数和超时。查询结果中的密码、Token、密钥、证件号、银行卡号、邮箱、IP 和手机号等会脱敏后再发送给模型。
+
+应用层限制不能替代数据库权限控制。数据库账号必须使用专门的只读账号，只授予需要调查的库表和 schema 的 `SELECT`/元数据权限；不要配置生产写账号。连接串只从 `.env` 读取，不会返回给网页或模型。密码中存在 `@`、`:`、`/` 等字符时需要进行 URL 编码。
 
 本地 Ollama 示例：
 
