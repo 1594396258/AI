@@ -16,7 +16,7 @@
 ```powershell
 cd "D:\PyCharm 2025.2.3\AI\ai_log_analyzer"
 python -m pip install -r requirements.txt
-python app.py
+python -m uvicorn app:app --host 127.0.0.1 --port 5000
 ```
 
 浏览器访问 <http://127.0.0.1:5000>。不配置 AI 也可以使用完整的本地规则分析。
@@ -29,7 +29,7 @@ python app.py
 $env:AI_API_KEY="你的密钥"
 $env:AI_BASE_URL="https://api.openai.com/v1"
 $env:AI_MODEL="gpt-4.1-mini"
-python app.py
+python -m uvicorn app:app --host 127.0.0.1 --port 5000
 ```
 
 本地 Ollama 示例：
@@ -37,7 +37,7 @@ python app.py
 ```powershell
 $env:AI_BASE_URL="http://127.0.0.1:11434/v1"
 $env:AI_MODEL="qwen2.5:7b"
-python app.py
+python -m uvicorn app:app --host 127.0.0.1 --port 5000
 ```
 
 完整配置参考 `.env.example`。应用不会自动读取 `.env`，这样可以避免无意加载工作区里的其他密钥；你可以通过系统环境变量、IDE 运行配置或自行使用 dotenv 注入。
@@ -47,6 +47,8 @@ python app.py
 ```powershell
 python -m pytest -q
 ```
+
+FastAPI 自动接口文档位于 <http://127.0.0.1:5000/docs>，备用 ReDoc 文档位于 <http://127.0.0.1:5000/redoc>。
 
 ## 隐私说明
 

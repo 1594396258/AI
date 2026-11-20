@@ -1,73 +1,100 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, ConfigDict, Field
 
 from ai_client import AIConfig, analyze_with_ai
 from analyzer import analyze_log
 
 
+BASE_DIR = Path(__file__).resolve().parent
 MAX_LOG_BYTES = 1_000_000
 
 
-def create_app() -> Flask:
-    app = Flask(__name__)
-    app.config["MAX_CONTENT_LENGTH"] = MAX_LOG_BYTES + 100_000
+class AnalyzeRequest(BaseModel):
+    """日志分析请求。额外字段被拒绝，避免客户端误传敏感参数。"""
 
-    @app.get("/")
-    def index():
-        return render_template("index.html")
+    model_config = ConfigDict(extra="forbid")
 
-    @app.get("/api/status")
-    def status():
+    log: str = Field(default="", description="需要分析的原始日志")
+    use_ai: bool = Field(default=False, description="是否调用已配置的 AI 服务进行深度分析")
+
+
+def error_response(message: str, status_code: int) -> JSONResponse:
+    return JSONResponse(status_code=status_code, content={"error": message})
+
+
+def create_app() -> FastAPI:
+    application = FastAPI(
+        title="TraceLens API",
+        description="本地优先的 AI 日志报错分析接口",
+        version="1.0.0",
+        docs_url="/docs",
+        redoc_url="/redoc",
+    )
+    application.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+    templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
+    @application.get("/", include_in_schema=False)
+    async def index(request: Request):
+        return templates.TemplateResponse(request=request, name="index.html", context={})
+
+    @application.get("/api/status", tags=["system"])
+    async def status() -> dict[str, object]:
         config = AIConfig.from_env()
-        return jsonify(
-            {
-                "ok": True,
-                "ai_configured": config.configured,
-                "model": config.model if config.configured else None,
-                "max_log_bytes": MAX_LOG_BYTES,
-            }
-        )
+        return {
+            "ok": True,
+            "ai_configured": config.configured,
+            "model": config.model if config.configured else None,
+            "max_log_bytes": MAX_LOG_BYTES,
+        }
 
-    @app.post("/api/analyze")
-    def analyze():
-        payload = request.get_json(silent=True) or {}
-        log = payload.get("log", "")
-        use_ai = bool(payload.get("use_ai", False))
-        if not isinstance(log, str) or not log.strip():
-            return jsonify({"error": "请粘贴或上传日志后再分析"}), 400
-        if len(log.encode("utf-8")) > MAX_LOG_BYTES:
-            return jsonify({"error": "日志不能超过 1 MB，请截取错误前后的关键片段"}), 413
+    @application.post("/api/analyze", tags=["analysis"])
+    async def analyze(payload: AnalyzeRequest):
+        if not payload.log.strip():
+            return error_response("请粘贴或上传日志后再分析", 400)
+        if len(payload.log.encode("utf-8")) > MAX_LOG_BYTES:
+            return error_response("日志不能超过 1 MB，请截取错误前后的关键片段", 413)
+
         try:
-            report = analyze_log(log)
+            report = await run_in_threadpool(analyze_log, payload.log)
         except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+            return error_response(str(exc), 400)
 
-        if use_ai:
+        if payload.use_ai:
             try:
-                report["ai_analysis"] = analyze_with_ai(report["sanitized_log"], report)
+                report["ai_analysis"] = await run_in_threadpool(
+                    analyze_with_ai,
+                    report["sanitized_log"],
+                    report,
+                )
                 report["analysis_mode"] = "ai+local"
             except (RuntimeError, ValueError) as exc:
                 report["ai_error"] = str(exc)
 
-        # Sanitized content is needed by the server only and should not be echoed to the browser.
+        # 脱敏后的完整日志仅供服务端 AI 分析使用，不回传浏览器。
         report.pop("sanitized_log", None)
-        return jsonify(report)
+        return report
 
-    @app.errorhandler(413)
-    def too_large(_error):
-        return jsonify({"error": "请求内容过大，日志不能超过 1 MB"}), 413
-
-    return app
+    return application
 
 
 app = create_app()
 
 
 if __name__ == "__main__":
-    host = os.getenv("APP_HOST", "127.0.0.1")
-    port = int(os.getenv("APP_PORT", "5000"))
-    app.run(host=host, port=port, debug=os.getenv("FLASK_DEBUG") == "1")
+    uvicorn.run(
+        "app:app",
+        host=os.getenv("APP_HOST", "127.0.0.1"),
+        port=int(os.getenv("APP_PORT", "5000")),
+        reload=os.getenv("APP_RELOAD") == "1",
+    )
 
