@@ -28,5 +28,5 @@ async def search(query: str):
 
 #json请求体，需要结合pydantic模拟的basemodel使用，因为fastapi接收json参数是需要结构化数据
 @app.post("/try/post")
-async def try_post(method:TryPost):
-    return {'code':'200','status':'OK','message':method.method}
+async def try_post(a:TryPost):
+    return {'code':'200','status':'OK','message':a.method}

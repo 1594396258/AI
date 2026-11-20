@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+import loguru
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -260,6 +262,7 @@ class ExchangeStore:
                     utc_now(),
                 ),
             )
+            loguru.logger.info("插入数据成功")
             return int(cursor.lastrowid)
 
     def list_records(

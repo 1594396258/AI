@@ -5,7 +5,7 @@ import secrets
 import time
 import uuid
 from typing import Any
-
+from loguru import logger
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
@@ -61,7 +61,7 @@ def build_ppp_router(store: ExchangeStore, settings: MockSettings) -> APIRouter:
             def reject_constant(value: str) -> None:
                 raise ValueError(f"Invalid JSON constant: {value}")
 
-            parsed = json.loads(raw or b"{}", parse_constant=reject_constant)
+            parsed = json.loads(raw or b"{}", parse_constant=reject_constant) # 转成字典
         except (ValueError, UnicodeDecodeError):
             return raw.decode("utf-8", errors="replace"), 400, "Invalid JSON"
         if not isinstance(parsed, dict):
@@ -114,8 +114,8 @@ def build_ppp_router(store: ExchangeStore, settings: MockSettings) -> APIRouter:
     async def payout(request: Request) -> JSONResponse:
         started_at, started_counter = utc_now(), time.perf_counter()
         request_id = uuid.uuid4().hex
-        scenario = await run_in_threadpool(store.get_scenario, "ppp")
-        body, error_status, error = await read_body(request)
+        scenario = await run_in_threadpool(store.get_scenario, "ppp") # 获取场景配置
+        body, error_status, error = await read_body(request)  # 读取请求参数并校验
         if error:
             result = (
                 error_status,
@@ -134,15 +134,15 @@ def build_ppp_router(store: ExchangeStore, settings: MockSettings) -> APIRouter:
                 scenario = await run_in_threadpool(
                     store.get_scenario, "ppp", original_payout["run_id"]
                 )
-            failure = authentication_error(request, body)
+            failure = authentication_error(request, body)  #鉴权
             if failure:
                 result = (*failure, order_no, "")
             else:
-                result = await run_in_threadpool(ppp.payout, body, scenario["config"])
+                result = await run_in_threadpool(ppp.payout, body, scenario["config"]) #代付
         return await run_in_threadpool(
             record_response, request, request_id, scenario, body, *result,
-            started_at, started_counter,
-        )
+            started_at, started_counter
+        ) # 写入数据库 sqlite3
 
     @router.get("/ppp/v1/payouts/status/{transaction_id}")
     def query(transaction_id: str, request: Request) -> JSONResponse:

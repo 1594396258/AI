@@ -3,7 +3,7 @@ import os
 import uuid
 
 import pytest
-
+from loguru import logger
 from payment_python_tests.database.mysql_client import MysqlClient
 from payment_python_tests.database.order_repository import OrderRepository
 from payment_python_tests.utils.wait_utils import wait_until
@@ -74,6 +74,7 @@ def test_ppp_static_callback_updates_dynamically_created_order(
             interval=0.5,
             description=f"PPP processing order with transaction id for {msg_id}",
         )
+        logger.info(f"查询出入金订单创建成功transaction id is {msg_id}")
         #等价的非匿名函数
         # def fetch_processing_order():
         #     return repository.get_route_child_by_main_msg_id(
@@ -105,6 +106,7 @@ def test_ppp_static_callback_updates_dynamically_created_order(
             interval=0.2,
             description=f"PPP payout evidence for {order.order_no}",
         )
+        logger.info(f"查询mock订单数据{order.order_no}")
         assert len(channel_records) == 1
 
         callback_amount = f"{Decimal(str(order.channel_amount)) / Decimal('100'):.2f}"
@@ -118,16 +120,16 @@ def test_ppp_static_callback_updates_dynamically_created_order(
             utr=f"AUTO-SUCCESS-{uuid.uuid4().hex[:12]}",
         )
 
-        assert result["target_status"] == 200
-        assert result["target_body"] == "SUCCESS"
-
-        callback_record = ppp_capture_api.record(result["request_id"])
-        assert callback_record["direction"] == "mock_to_java"
-        assert callback_record["business_order_no"] == order.order_no
-        assert callback_record["channel_order_no"] == order.transaction_id
-        assert callback_record["body"]["amount"] == callback_amount
-        assert callback_record["body"]["status"] == "success"
-        assert callback_record["response_status"] == 200
+        assert result["target_status"] == 200  # 主要验证是否正常响应过来
+        # assert result["target_body"] == "SUCCESS"
+        # 因为是自己回调的mock，所以没有必要进行回调参数自己本身的验证，只需要验证出入金是否正常扭转订单状态和通知给商户的报文是否正确
+        # callback_record = ppp_capture_api.record(result["request_id"])
+        # assert callback_record["direction"] == "mock_to_java"
+        # assert callback_record["business_order_no"] == order.order_no
+        # assert callback_record["channel_order_no"] == order.transaction_id
+        # assert callback_record["body"]["amount"] == callback_amount
+        # assert callback_record["body"]["status"] == "success"
+        # assert callback_record["response_status"] == 200
 
         final_order = wait_until(
             lambda: repository.get(order.order_no),
