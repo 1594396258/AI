@@ -58,7 +58,8 @@ SYSTEM_PROMPT = """你是一名资深 SRE 和软件故障分析专家。请基�
 1. 只使用日志中有证据支持的事实，不虚构服务、代码或配置。
 2. 区分“直接错误”“深层根因”和“连带现象”；证据不足时明确说出需要补充什么。
 3. 修复步骤必须具体、按优先级排列，并提供验证方法。
-4. 返回严格 JSON，不要 Markdown，字段固定为：
+4. 如果提供了源码片段，必须把日志堆栈与具体文件、行号和代码逻辑关联起来；源码只代表局部上下文，不要假设未提供的实现。
+5. 返回严格 JSON，不要 Markdown，字段固定为：
 {
   "summary": "一句话结论",
   "root_cause": "根因解释",
@@ -86,32 +87,27 @@ def _extract_json(content: str) -> dict[str, Any]:
     return value
 
 
-def analyze_with_ai(sanitized_log: str, local_report: dict[str, Any], config: AIConfig | None = None) -> dict[str, Any]:
+def chat_completion(
+    messages: list[dict[str, str]],
+    config: AIConfig | None = None,
+    *,
+    max_tokens: int = 1800,
+    temperature: float = 0.1,
+) -> str:
+    """调用 OpenAI 兼容的 Chat Completions，并返回文本内容。"""
+
     config = config or AIConfig.from_env()
     if not config.configured:
-        raise RuntimeError("AI 未配置：请设置 AI_API_KEY（或 OPENAI_API_KEY）")
+        raise RuntimeError("AI 未配置：请在 .env 设置 AI_API_KEY（或 OPENAI_API_KEY）")
 
     endpoint = config.base_url
     if not endpoint.endswith("/chat/completions"):
         endpoint += "/chat/completions"
-    local_context = {key: value for key, value in local_report.items() if key != "sanitized_log"}
-    # Keep the most relevant beginning and ending when a log is very large.
-    if len(sanitized_log) > 80_000:
-        sanitized_log = sanitized_log[:40_000] + "\n... [中间日志已截断] ...\n" + sanitized_log[-40_000:]
-    user_prompt = (
-        "本地规则分析：\n"
-        + json.dumps(local_context, ensure_ascii=False)
-        + "\n\n已脱敏日志：\n"
-        + sanitized_log
-    )
     payload = {
         "model": config.model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.1,
-        "max_tokens": 1800,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
     }
     headers = {"Content-Type": "application/json"}
     if config.api_key:
@@ -132,9 +128,37 @@ def analyze_with_ai(sanitized_log: str, local_report: dict[str, Any], config: AI
         raise RuntimeError(f"无法连接 AI 服务：{exc}") from exc
 
     try:
-        content = body["choices"][0]["message"]["content"]
+        return body["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
         raise RuntimeError("AI 服务响应格式不兼容 Chat Completions") from exc
+
+
+def analyze_with_ai(
+    sanitized_log: str,
+    local_report: dict[str, Any],
+    config: AIConfig | None = None,
+    code_context: str | None = None,
+) -> dict[str, Any]:
+    config = config or AIConfig.from_env()
+    local_context = {key: value for key, value in local_report.items() if key != "sanitized_log"}
+    # Keep the most relevant beginning and ending when a log is very large.
+    if len(sanitized_log) > 80_000:
+        sanitized_log = sanitized_log[:40_000] + "\n... [中间日志已截断] ...\n" + sanitized_log[-40_000:]
+    user_prompt = (
+        "本地规则分析：\n"
+        + json.dumps(local_context, ensure_ascii=False)
+        + "\n\n已脱敏日志：\n"
+        + sanitized_log
+    )
+    if code_context:
+        user_prompt += "\n\n与日志匹配的已脱敏源码片段：\n" + code_context
+    content = chat_completion(
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        config,
+    )
     result = _extract_json(content)
     result["model"] = config.model
     return result

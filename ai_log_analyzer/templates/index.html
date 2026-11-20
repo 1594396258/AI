@@ -64,6 +64,19 @@
           <span>最大 1 MB</span>
         </div>
 
+        <div class="code-picker hidden" id="codePicker">
+          <div class="code-picker-icon">
+            <svg viewBox="0 0 24 24"><path d="m8 9-3 3 3 3m8-6 3 3-3 3m-2-9-4 12"/></svg>
+          </div>
+          <label for="codeProject">
+            <strong>关联本地代码</strong>
+            <small>AI 只读调查目录、源码、调用链和配置</small>
+          </label>
+          <select id="codeProject" disabled>
+            <option value="">不读取代码</option>
+          </select>
+        </div>
+
         <div class="analyze-row">
           <label class="ai-toggle" id="aiToggleLabel">
             <input id="aiToggle" type="checkbox">
@@ -154,6 +167,7 @@
           <span class="section-icon blue"><svg viewBox="0 0 24 24"><path d="m12 3 1.3 4.2L17 9l-3.7 1.8L12 15l-1.3-4.2L7 9l3.7-1.8L12 3Zm6 11 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></svg></span>
           <div><span>AI ANALYSIS</span><h3>深度分析</h3></div>
         </div>
+        <div class="code-references hidden" id="codeReferences"></div>
         <div id="aiContent"></div>
       </article>
 

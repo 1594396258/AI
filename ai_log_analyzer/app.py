@@ -15,10 +15,22 @@ try:
     # 从工作区根目录启动：uvicorn ai_log_analyzer.app:app
     from .ai_client import AIConfig, analyze_with_ai
     from .analyzer import analyze_log
+    from .code_investigator import investigate_with_ai
+    from .code_context import (
+        CodeContextError,
+        configured_projects,
+        get_project,
+    )
 except ImportError:
     # 进入本目录启动：uvicorn app:app
     from ai_client import AIConfig, analyze_with_ai
     from analyzer import analyze_log
+    from code_investigator import investigate_with_ai
+    from code_context import (
+        CodeContextError,
+        configured_projects,
+        get_project,
+    )
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -32,6 +44,7 @@ class AnalyzeRequest(BaseModel):
 
     log: str = Field(default="", description="需要分析的原始日志")
     use_ai: bool = Field(default=False, description="是否调用已配置的 AI 服务进行深度分析")
+    code_project_id: str | None = Field(default=None, description="需要关联分析的允许代码库 ID")
 
 
 def error_response(message: str, status_code: int) -> JSONResponse:
@@ -63,6 +76,14 @@ def create_app() -> FastAPI:
             "max_log_bytes": MAX_LOG_BYTES,
         }
 
+    @application.get("/api/code-projects", tags=["system"])
+    async def code_projects() -> dict[str, object]:
+        projects = configured_projects()
+        return {
+            "enabled": bool(projects),
+            "projects": [project.public_dict() for project in projects],
+        }
+
     @application.post("/api/analyze", tags=["analysis"])
     async def analyze(payload: AnalyzeRequest):
         if not payload.log.strip():
@@ -75,14 +96,34 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             return error_response(str(exc), 400)
 
+        project = None
+        if payload.code_project_id:
+            if not payload.use_ai:
+                return error_response("关联本地代码需要同时启用 AI 深度分析", 400)
+            try:
+                project = get_project(payload.code_project_id)
+            except CodeContextError as exc:
+                return error_response(str(exc), 400)
+
         if payload.use_ai:
             try:
-                report["ai_analysis"] = await run_in_threadpool(
-                    analyze_with_ai,
-                    report["sanitized_log"],
-                    report,
-                )
-                report["analysis_mode"] = "ai+local"
+                if project:
+                    ai_analysis, investigation = await run_in_threadpool(
+                        investigate_with_ai,
+                        report["sanitized_log"],
+                        report,
+                        project,
+                    )
+                    report["ai_analysis"] = ai_analysis
+                    report["code_context"] = investigation
+                    report["analysis_mode"] = "ai+investigation+local"
+                else:
+                    report["ai_analysis"] = await run_in_threadpool(
+                        analyze_with_ai,
+                        report["sanitized_log"],
+                        report,
+                    )
+                    report["analysis_mode"] = "ai+local"
             except (RuntimeError, ValueError) as exc:
                 report["ai_error"] = str(exc)
 

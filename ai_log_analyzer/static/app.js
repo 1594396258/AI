@@ -11,6 +11,8 @@ const elements = {
   analyze: $("#analyzeButton"),
   aiToggle: $("#aiToggle"),
   aiHint: $("#aiHint"),
+  codePicker: $("#codePicker"),
+  codeProject: $("#codeProject"),
   empty: $("#emptyState"),
   loading: $("#loadingState"),
   loadingText: $("#loadingText"),
@@ -98,11 +100,24 @@ function renderMetrics(report) {
 function renderAI(report) {
   const card = $("#aiCard");
   const content = $("#aiContent");
+  const references = $("#codeReferences");
   if (!report.ai_analysis && !report.ai_error) {
     card.classList.add("hidden");
     return;
   }
   card.classList.remove("hidden");
+  if (report.code_context) {
+    const context = report.code_context;
+    const files = (context.files || []).map(item => `<span>${escapeHtml(item.path)}:${escapeHtml(item.matched_line || `${item.start_line}-${item.end_line}`)}</span>`).join("");
+    const trace = (context.trace || []).map(item => `${escapeHtml(item.step)}. ${escapeHtml(item.tool)}${item.reason ? ` — ${escapeHtml(item.reason)}` : ""}`).join("<br>");
+    references.classList.remove("hidden");
+    references.innerHTML = `<strong>智能代码调查：${escapeHtml(context.project.name)}</strong> · ${escapeHtml(context.stats.rounds)} 轮 · ${escapeHtml(context.stats.tool_calls)} 次只读工具调用 · 引用 ${escapeHtml(context.stats.matched_files)} 个文件
+      <div class="code-reference-list">${files || "调查未引用具体源码文件"}</div>
+      ${trace ? `<details class="investigation-trace"><summary>查看调查轨迹</summary><div>${trace}</div></details>` : ""}`;
+  } else {
+    references.classList.add("hidden");
+    references.innerHTML = "";
+  }
   if (report.ai_error) {
     content.innerHTML = `<div class="ai-error">AI 深度分析未完成：${escapeHtml(report.ai_error)}。本地分析结果不受影响。</div>`;
     return;
@@ -134,7 +149,13 @@ function renderReport(report) {
   orb.querySelector("span").textContent = meta.symbol;
   badge.className = `severity-badge ${meta.className}`;
   badge.textContent = meta.label;
-  $("#modeBadge").textContent = report.analysis_mode === "ai+local" ? `AI + 本地分析 · ${report.ai_analysis?.model || "模型"}` : "本地规则分析";
+  const modeLabels = {
+    "ai+investigation+local": `AI 智能代码调查 · ${report.ai_analysis?.model || "模型"}`,
+    "ai+code+local": `AI + 代码关联 · ${report.ai_analysis?.model || "模型"}`,
+    "ai+local": `AI + 本地分析 · ${report.ai_analysis?.model || "模型"}`,
+    "local": "本地规则分析",
+  };
+  $("#modeBadge").textContent = modeLabels[report.analysis_mode] || "本地规则分析";
   $("#confidenceLabel").textContent = `置信度 ${report.confidence}%`;
   $("#summaryTitle").textContent = report.likely_causes?.[0]?.title || "分析结论";
   $("#summaryText").textContent = report.summary;
@@ -169,12 +190,17 @@ async function analyze() {
     return;
   }
   setLoading(true);
-  elements.loadingText.textContent = elements.aiToggle.checked ? "本地提取完成后将请求 AI 深度分析…" : "提取异常与关键堆栈…";
+  const useCode = elements.aiToggle.checked && Boolean(elements.codeProject.value);
+  elements.loadingText.textContent = useCode ? "AI 正在多轮调查源码、调用链与配置…" : (elements.aiToggle.checked ? "本地提取完成后将请求 AI 深度分析…" : "提取异常与关键堆栈…");
   try {
     const response = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ log, use_ai: elements.aiToggle.checked }),
+      body: JSON.stringify({
+        log,
+        use_ai: elements.aiToggle.checked,
+        code_project_id: useCode ? elements.codeProject.value : null,
+      }),
     });
     const data = await response.json().catch(() => ({ error: "服务响应格式异常" }));
     if (!response.ok) throw new Error(data.error || `分析失败 (${response.status})`);
@@ -199,7 +225,8 @@ function reportAsMarkdown(report) {
     const item = report.ai_analysis;
     ai = `\n## AI 深度分析\n\n${item.summary || ""}\n\n${item.root_cause || ""}\n`;
   }
-  return `# 日志分析报告\n\n- 严重程度：${severityMeta(report.severity).label}\n- 置信度：${report.confidence}%\n- 分析方式：${report.analysis_mode}\n\n## 结论\n\n${report.summary}\n\n## 可能原因\n\n${causes}\n\n## 建议操作\n\n${actions}${ai}\n## 关键日志\n\n${evidence}\n`;
+  const code = report.code_context ? `\n## 关联代码\n\n${report.code_context.files.map(item => `- ${item.path}:${item.matched_line || item.start_line}`).join("\n")}\n` : "";
+  return `# 日志分析报告\n\n- 严重程度：${severityMeta(report.severity).label}\n- 置信度：${report.confidence}%\n- 分析方式：${report.analysis_mode}\n\n## 结论\n\n${report.summary}\n\n## 可能原因\n\n${causes}\n\n## 建议操作\n\n${actions}${ai}${code}\n## 关键日志\n\n${evidence}\n`;
 }
 
 async function readFile(file) {
@@ -232,6 +259,10 @@ elements.file.addEventListener("change", event => readFile(event.target.files[0]
 elements.sample.addEventListener("click", () => { elements.input.value = sampleLog; updateInputStats(); showToast("示例日志已载入"); });
 elements.clear.addEventListener("click", () => { elements.input.value = ""; updateInputStats(); elements.results.classList.add("hidden"); elements.input.focus(); });
 elements.analyze.addEventListener("click", analyze);
+elements.aiToggle.addEventListener("change", () => {
+  elements.codeProject.disabled = !elements.aiToggle.checked;
+  if (!elements.aiToggle.checked) elements.codeProject.value = "";
+});
 
 for (const eventName of ["dragenter", "dragover"]) {
   elements.dropZone.addEventListener(eventName, event => { event.preventDefault(); elements.dropZone.classList.add("dragging"); });
@@ -266,6 +297,13 @@ async function initialize() {
     const status = await response.json();
     elements.aiToggle.disabled = !status.ai_configured;
     elements.aiHint.textContent = status.ai_configured ? `使用 ${status.model}` : "配置 API Key 后可用";
+    const projectsResponse = await fetch("/api/code-projects");
+    const projectsStatus = await projectsResponse.json();
+    if (projectsStatus.enabled) {
+      elements.codePicker.classList.remove("hidden");
+      elements.codeProject.innerHTML = '<option value="">不读取代码</option>' + projectsStatus.projects.map(project => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name)}</option>`).join("");
+      elements.codeProject.disabled = !elements.aiToggle.checked;
+    }
   } catch (_) {
     elements.aiToggle.disabled = true;
     elements.aiHint.textContent = "服务状态不可用";
